@@ -55,7 +55,7 @@ test('column name alias: Sales Rep → owner', () => {
   assert.equal(result.opportunities[0].owner, 'John Doe');
 });
 
-test('amount alias: 含税金额 → amount', () => {
+test('amount alias: 含税金额 → amountTaxIncluded', () => {
   const XLSX_IO = require('../app/xlsx-io.js');
   const headers = ['#', '团队', '负责人', '商机', '客户',
     '业务线', '产品', '币种', '阶段', '赢率',
@@ -64,8 +64,9 @@ test('amount alias: 含税金额 → amount', () => {
     'PL', 'P', 'RMB', 'ST1', 0.5, 12345.67, 11000, 46023, '']];
   const bytes = buildXlsx({ headers, rows });
   const result = XLSX_IO.parseXlsxSmart(bytes);
-  assert.equal(result.opportunities[0].amount, 12345.67);
-  assert.equal(result.opportunities[0].amountNet, 11000);
+  assert.equal(result.opportunities[0].amountTaxIncluded, 12345.67);
+  // Without amountRmb column, auto-computes from amount × rate (RMB rate = 1.0)
+  assert.equal(result.opportunities[0].amountRmbEquivalent, 12345.67);
 });
 
 test('smart dict parsing: classifies by value patterns when header is unknown', () => {
@@ -121,10 +122,11 @@ test('buildXlsxFromState roundtrips back to similar parseXlsxSmart output', () =
   const XLSX_IO = require('../app/xlsx-io.js');
   const state = {
     opportunities: [
-      { id: 'o1', team: '基础业务', owner: '李经理', oppName: '项目A', customer: '客户A',
+      { id: 'o1', team: '基础业务', owner: '李经理', customer: '客户A',
         productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST4 赢单(Win)',
-        winRate: 1, amount: 1000, amountNet: 885, expectedDate: 46023,
-        note: 'note', loseReason: '', deleted: false, parseError: null, position: 1 }
+        winRate: 1, amountTaxIncluded: 1000, amountRmbEquivalent: 885, expectedDate: 46023,
+        note: 'note', loseReason: '', salesChannel: '', invoiceStatus: '',
+        deleted: false, parseError: null, position: 1 }
     ],
     dicts: {
       teams: ['基础业务'],
@@ -139,8 +141,34 @@ test('buildXlsxFromState roundtrips back to similar parseXlsxSmart output', () =
   const reparsed = XLSX_IO.parseXlsxSmart(bytes);
   assert.equal(reparsed.opportunities.length, 1);
   assert.equal(reparsed.opportunities[0].owner, '李经理');
-  assert.equal(reparsed.opportunities[0].amount, 1000);
+  assert.equal(reparsed.opportunities[0].amountTaxIncluded, 1000);
   assert.equal(reparsed.dicts.teams[0], '基础业务');
+});
+
+test('column alias: 赢单概率 → winRate (the v3.0 win-rate bug fix)', () => {
+  const XLSX_IO = require('../app/xlsx-io.js');
+  const headers = ['#', '团队', '主责销售', '商机', '客户',
+    '业务线', '业务线产品', '销售渠道', '阶段', '币种',
+    '赢单概率', '预估合同金额(含税)', '预估合同金额(RMB)', '预计落单时间', '备注'];
+  const rows = [[1, '渠道业务部', '张晶晶', '项目A', '客户A',
+    'PL1', 'P120', '字节跳动', 'ST4:赢单(Win)', 'USD', 0.7, 1000, 7200, 46023, '已开票']];
+  const bytes = buildXlsx({ headers, rows });
+  const result = XLSX_IO.parseXlsxSmart(bytes);
+  assert.equal(result.opportunities[0].winRate, 0.7, '赢单概率 should map to winRate');
+  assert.equal(result.opportunities[0].owner, '张晶晶', '主责销售 should map to owner');
+  assert.equal(result.opportunities[0].salesChannel, '字节跳动', '销售渠道 should map to salesChannel');
+  assert.equal(result.opportunities[0].invoiceStatus, '已开票', '备注 should map to invoiceStatus');
+  assert.equal(result.opportunities[0].amountTaxIncluded, 1000, '预估合同金额(含税) should map to amountTaxIncluded');
+  assert.equal(result.opportunities[0].amountRmbEquivalent, 7200, '预估合同金额(RMB) should map to amountRmbEquivalent');
+});
+
+test('full-width colon ST4:赢单(Win) normalizes to ST4:赢单(Win)', () => {
+  const XLSX_IO = require('../app/xlsx-io.js');
+  const headers = ['#', '团队', '负责人', '商机', '客户', '业务线', '产品', '币种', '阶段', '赢率', '金额', '时间', '备注'];
+  const rows = [[1, 'T', 'O', 'N', 'C', 'PL', 'P', 'USD', 'ST4:赢单(Win)', 0.5, 100, 46023, '']];
+  const bytes = buildXlsx({ headers, rows });
+  const result = XLSX_IO.parseXlsxSmart(bytes);
+  assert.equal(result.opportunities[0].stage, 'ST4:赢单(Win)', 'full-width colon should normalize to half-width');
 });
 
 test('parseXlsxSmart assigns UUID id to every opportunity', () => {

@@ -25,7 +25,9 @@ function test(name, fn) {
   });
 }
 
-// ---- v3.0 bridge: xlsx-io.js produces v2.0 fields; transform to v3.0 ----
+// ---- v3.0 bridge: xlsx-io.js now produces v3.0 fields directly ----
+// (v3.0 xlsx-io emits amountTaxIncluded/amountRmbEquivalent, no oppName, plus
+// salesChannel/invoiceStatus). We just normalize dict tables.
 const DICT_TABLES_V30 = ['dict_teams','dict_product_lines','dict_products','dict_stages','dict_currencies','dict_lose_reasons'];
 const DICT_KEYS_V30 = ['teams','productLines','products','stages','currencies','loseReasons'];
 
@@ -40,13 +42,12 @@ function importXlsxV30(buffer) {
   let n = 0, errs = 0;
   for (const o of parsed.opportunities) {
     if (o.parseError) { errs++; continue; }
+    // v3.0 xlsx-io.js already produces v3.0-shaped opps; just pass through
     CRM_DB.upsertOpp({
       ...o,
       salesChannel: o.salesChannel || '',
       invoiceStatus: o.invoiceStatus || '',
       dictRefs: o.dictRefs || null,
-      amountTaxIncluded: o.amount != null ? o.amount : 0,
-      amountRmbEquivalent: o.amountNet != null ? o.amountNet : 0,
     });
     n++;
   }
@@ -61,18 +62,13 @@ function bridgeV30ToV20(opp) {
   return opp;
 }
 
-// Patch CRM_DB.importFromXlsx to be v3.0-aware (handles xlsx-io.js's v2.0 output)
+// Patch CRM_DB.importFromXlsx to be v3.0-aware (handles xlsx-io.js's v3.0 output)
 CRM_DB.importFromXlsx = importXlsxV30;
 
-// Patch CRM_DB.exportToXlsx to bridge v3.0 state to v2.0 shape (xlsx-io.js still v2.0)
+// Patch CRM_DB.exportToXlsx: state has v3.0 fields, xlsx-io.js buildXlsxFromState consumes v3.0 directly
 const _origExportToXlsx = CRM_DB.exportToXlsx;
 CRM_DB.exportToXlsx = function() {
   const s = CRM_DB.loadAllToState();
-  for (const o of s.opportunities) {
-    if (o.amount == null) o.amount = o.amountTaxIncluded || 0;
-    if (o.amountNet == null) o.amountNet = o.amountRmbEquivalent || 0;
-    if (o.oppName == null) o.oppName = o.customer || '';
-  }
   return CRM_XLSX.buildXlsxFromState(s);
 };
 
@@ -217,23 +213,23 @@ await test('exportXlsxBlob strips cell styles (Excel renders numbers correctly)'
   const X = require('../vendor/sheetjs/xlsx.full.min.js');
   const wb = X.read(out, { type: 'array' });
   const ws = wb.Sheets['Sheet1'];
-  // Find a numeric cell in the data (K18 = 含税金额). After stripStyles, s.numFmtId should be 0
+  // Find a numeric cell in the data (M18 = 预估合同金额（含税）). After stripStyles, s.numFmtId should be 0
   // so Excel uses General format and renders the number.
-  const cell = ws['K18'];
-  assert.ok(cell, 'K18 should exist');
+  const cell = ws['M18'];
+  assert.ok(cell, 'M18 should exist');
   assert.equal(cell.t, 'n', 'cell should be a number type');
   if (cell.s) {
     assert.equal(cell.s.numFmtId, 0, 'numFmtId should be 0 (General) so Excel renders numbers');
   }
   assert.equal(cell.v, 10000, 'value preserved');
-  // Also check an amount-with-decimal cell (L18 = 不含税金额)
-  const cellL = ws['L18'];
-  assert.ok(cellL, 'L18 should exist');
-  assert.equal(cellL.t, 'n', 'L18 should be a number type');
-  if (cellL.s) {
-    assert.equal(cellL.s.numFmtId, 0, 'L18 numFmtId should be 0');
+  // Also check an amount cell (N18 = 预估合同金额（RMB）auto-computed)
+  const cellN = ws['N18'];
+  assert.ok(cellN, 'N18 should exist');
+  assert.equal(cellN.t, 'n', 'N18 should be a number type');
+  if (cellN.s) {
+    assert.equal(cellN.s.numFmtId, 0, 'N18 numFmtId should be 0');
   }
-  assert.equal(cellL.v, 8849.56, 'L18 value preserved');
+  assert.equal(cellN.v, 10000, 'N18 value preserved (auto-computed)');
 });
 
 console.log('upsertOpp');

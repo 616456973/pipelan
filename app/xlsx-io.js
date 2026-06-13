@@ -5,20 +5,21 @@
 
   // ---- Column name aliases (key -> array of accepted header names) ----
   const COLUMN_ALIASES = {
-    team:        ['销售团队', '团队'],
-    owner:       ['负责人', '主责销售', '责任人', 'Sales Rep', 'Owner', '销售负责人', '主责人'],
-    oppName:     ['商机名称', '商机', '项目名称', 'Opp Name', 'Opportunity'],
-    customer:    ['客户名称', '客户', '客户公司', 'Customer'],
-    productLine: ['业务线', '产品线', '业务', 'Product Line', 'productLine'],
-    product:     ['业务/产品', '产品', 'Product', '产品名称'],
-    currency:    ['币种', 'Currency'],
-    stage:       ['阶段', 'Stage'],
-    winRate:     ['赢率', 'Win Rate', '胜率'],
-    amount:      ['预计合同金额(含税)', '含税金额', '合同金额', 'Amount', '总金额'],
-    amountNet:   ['预计合同金额(不含税)', '不含税金额', '净金额', 'Amount Net'],
-    expectedDate:['预计成交/丢单时间', '预计成交时间', '成交时间', 'Expected Date'],
-    note:        ['备注', 'Notes', '说明'],
-    loseReason:  ['丢单原因', '失败原因', 'Lose Reason']
+    team:           ['销售团队', '团队', 'Team'],
+    owner:          ['主责销售', '负责人', '责任人', 'Sales Rep', 'Owner', '销售负责人'],
+    customer:       ['客户名称', '客户', '客户公司', 'Customer'],
+    productLine:    ['业务线', '产品线', '业务', 'Product Line'],
+    product:        ['业务线产品', '业务/产品', '产品', 'Product'],
+    salesChannel:   ['销售渠道', 'Sales Channel'],
+    stage:          ['阶段', 'Stage'],
+    invoiceStatus:  ['发票状态', '开票状态', '备注', 'Invoice Status'],
+    currency:       ['币种', 'Currency'],
+    amount:         ['预估合同金额（含税）', '预估合同金额(含税)', '含税金额', '合同金额', 'Amount'],
+    amountRmb:      ['预估合同金额（RMB）', '预估合同金额(RMB)', '折算RMB金额', 'RMB金额'],
+    winRate:        ['赢单概率', '赢率', 'Win Rate', '胜率'],
+    expectedDate:   ['预计落单时间', '预计成交/丢单时间', '成交时间', 'Expected Date'],
+    note:           ['自由备注', 'Internal Note', 'Notes'],
+    loseReason:     ['丢单原因', '失败原因', 'Lose Reason']
   };
 
   // ---- Dict key classification ----
@@ -107,22 +108,24 @@
 
       const opp = {
         id: makeId(),
-        team: '', owner: '', oppName: '', customer: '',
-        productLine: '', product: '', currency: '', stage: '',
-        winRate: 0, amount: 0, amountNet: 0,
+        team: '', owner: '', customer: '',
+        productLine: '', product: '', salesChannel: '', stage: '',
+        invoiceStatus: '', currency: '',
+        winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0,
         expectedDate: null, note: '', loseReason: '',
         deleted: false, parseError: null, position: r + 1
       };
 
       try {
-        if (colMap.team !== undefined)        opp.team = cleanStr(row[colMap.team]);
-        if (colMap.owner !== undefined)       opp.owner = cleanStr(row[colMap.owner]);
-        if (colMap.oppName !== undefined)     opp.oppName = cleanStr(row[colMap.oppName]);
-        if (colMap.customer !== undefined)    opp.customer = cleanStr(row[colMap.customer]);
-        if (colMap.productLine !== undefined) opp.productLine = cleanStr(row[colMap.productLine]);
-        if (colMap.product !== undefined)     opp.product = cleanStr(row[colMap.product]);
-        if (colMap.currency !== undefined)    opp.currency = cleanStr(row[colMap.currency]);
-        if (colMap.stage !== undefined)       opp.stage = cleanStr(row[colMap.stage]) || 'ST1 线索(Leads)';
+        if (colMap.team !== undefined)           opp.team = cleanStr(row[colMap.team]);
+        if (colMap.owner !== undefined)          opp.owner = cleanStr(row[colMap.owner]);
+        if (colMap.customer !== undefined)       opp.customer = cleanStr(row[colMap.customer]);
+        if (colMap.productLine !== undefined)    opp.productLine = cleanStr(row[colMap.productLine]);
+        if (colMap.product !== undefined)        opp.product = cleanStr(row[colMap.product]);
+        if (colMap.salesChannel !== undefined)   opp.salesChannel = cleanStr(row[colMap.salesChannel]);
+        if (colMap.stage !== undefined)          opp.stage = cleanStr(row[colMap.stage]).replace(/：/g, ':') || 'ST1 线索(Leads)';
+        if (colMap.invoiceStatus !== undefined)  opp.invoiceStatus = cleanStr(row[colMap.invoiceStatus]);
+        if (colMap.currency !== undefined)       opp.currency = cleanStr(row[colMap.currency]);
         if (colMap.winRate !== undefined) {
           const wr = toNumber(row[colMap.winRate]);
           if (wr === null) throw new Error('winRate 不是数字');
@@ -131,12 +134,16 @@
         if (colMap.amount !== undefined) {
           const amt = toNumber(row[colMap.amount]);
           if (amt === null) throw new Error('amount 不是数字');
-          opp.amount = amt;
+          opp.amountTaxIncluded = amt;
         }
-        if (colMap.amountNet !== undefined) {
-          const an = toNumber(row[colMap.amountNet]);
-          if (an === null) throw new Error('amountNet 不是数字');
-          opp.amountNet = an;
+        if (colMap.amountRmb !== undefined) {
+          const rmb = toNumber(row[colMap.amountRmb]);
+          if (rmb === null) throw new Error('amountRmb 不是数字');
+          opp.amountRmbEquivalent = rmb;
+        } else if (colMap.amount !== undefined) {
+          // auto-compute from amount × rate (fallback when amountRmb column not present)
+          const rate = (typeof EXCHANGE_RATES_TO_RMB !== 'undefined' && EXCHANGE_RATES_TO_RMB[opp.currency]) || 1.0;
+          opp.amountRmbEquivalent = opp.amountTaxIncluded * rate;
         }
         if (colMap.expectedDate !== undefined) {
           const d = row[colMap.expectedDate];
@@ -323,12 +330,13 @@
     const X = getXLSX();
     const wb = X.utils.book_new();
 
-    // Sheet1: 14 columns (the canonical schema)
+    // Sheet1: 17 columns (v3.0 schema)
     const headers = [
-      '#', '销售团队', '负责人', '商机名称', '客户名称',
-      '业务线', '业务/产品', '币种', '阶段', '赢率',
-      '含税金额', '不含税金额', '预计成交/丢单时间', '备注',
-      '丢单原因'
+      '#', '销售团队', '主责销售', '客户名称', '商机名称',
+      '业务线', '业务线产品', '销售渠道', '阶段', '发票状态',
+      '币种', '赢单概率',
+      '预估合同金额（含税）', '预估合同金额（RMB）', '预计落单时间',
+      '自由备注', '丢单原因'
     ];
     const sheet1Rows = [];
     for (let i = 0; i < 16; i++) sheet1Rows.push(new Array(headers.length).fill(''));
@@ -338,10 +346,11 @@
       if (o.deleted) continue;
       if (o.parseError) continue;
       sheet1Rows.push([
-        n++, o.team, o.owner, o.oppName, o.customer,
-        o.productLine, o.product, o.currency, o.stage, o.winRate,
-        o.amount, o.amountNet, o.expectedDate === null ? '' : o.expectedDate, o.note,
-        o.loseReason || ''
+        n++, o.team, o.owner, o.customer, '',
+        o.productLine, o.product, o.salesChannel || '', o.stage, o.invoiceStatus || '',
+        o.currency, o.winRate,
+        o.amountTaxIncluded, o.amountRmbEquivalent, o.expectedDate === null ? '' : o.expectedDate,
+        o.note || '', o.loseReason || ''
       ]);
     }
     const ws1 = X.utils.aoa_to_sheet(sheet1Rows);
