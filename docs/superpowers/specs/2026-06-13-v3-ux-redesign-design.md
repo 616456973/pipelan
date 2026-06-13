@@ -41,7 +41,7 @@
 | 3 | 赢率 0% | 加别名"赢单概率" + 加字段销售渠道 + 修正所有 5 个缺失别名 |
 | 4 | 筛选字段改造 | 去掉"产品/产品线"加"客户/负责人", 团队页改"字段说明" |
 | 5 | 金额总计 | 列表底部加汇总行 (含税 / 折算 RMB / 加权) |
-| 6 | 备注拆列 | 实际只 5 个枚举值, 重命名为"发票状态"入字典 (不再叫"备注") |
+| 6 | 备注拆列 | 实际只 5 个枚举值, 重命名为"发票状态" (内置, 不入字典) |
 | 7 | 新增页调整 | form 加 2 字段 (发票状态/折算 RMB), 调整字段顺序 |
 | 8 | 多维分析太简单 | 8 视图 → 12 视图 (加客户/产品/状态/趋势 4 维) |
 | 9 | 字典对应关系 | 加"字段说明"页 (列表每个字典↔商机字段的对应关系) |
@@ -59,7 +59,7 @@
 -- 新: 全部 14 业务字段 + dict_refs (JSON) + 元字段
 CREATE TABLE oportunidades (
   id TEXT PRIMARY KEY,
-  -- 业务字段 (14 个)
+  -- 业务字段 (15 个)
   team TEXT,                  -- 销售团队 (dict_teams)
   owner TEXT,                 -- 主责销售 (新增为字典 dict_owners)
   customer TEXT,              -- 客户名称 (新增为字典 dict_customers)
@@ -67,13 +67,13 @@ CREATE TABLE oportunidades (
   product TEXT,               -- 业务线产品 (dict_products)
   sales_channel TEXT,         -- 销售渠道 (新增字段/字典 dict_sales_channels)
   stage TEXT,                 -- 阶段 (dict_stages)
-  invoice_status TEXT,        -- 发票状态 (新增字段, dict_invoice_status)
+  invoice_status TEXT,        -- 发票状态 (内置枚举, 不入字典)
   currency TEXT,              -- 币种 (dict_currencies)
   amount_tax_included REAL,   -- 含税金额 (原 M 列)
-  amount_rmb_equivalent REAL, -- 折算 RMB 金额 (新增, 原 N 列)
+  amount_rmb_equivalent REAL, -- 折算 RMB 金额 (自动算, 由 amount × exchangeRate 得)
   win_rate REAL,              -- 赢单概率
   expected_date REAL,         -- 预计落单时间
-  note TEXT,                  -- 自由文本备注 (新增, 跟 invoice_status 分开)
+  note TEXT,                  -- 自由文本备注 (跟 invoice_status 分开)
   -- 元字段
   dict_refs TEXT,             -- JSON: 字段来源说明 (新增)
   deleted INTEGER DEFAULT 0,
@@ -88,12 +88,34 @@ CREATE TABLE oportunidades (
 -- 原有 6 张
 dict_teams, dict_product_lines, dict_products, dict_stages, dict_currencies, dict_lose_reasons
 
--- 新增 4 张 (来自 v3.0 schema)
+-- 新增 3 张 (来自 v3.0 schema; 发票状态内置, 不进字典)
 dict_owners              -- 主责销售
 dict_customers           -- 客户名称
 dict_sales_channels      -- 销售渠道
-dict_invoice_status      -- 发票状态 (5 枚举: 未开发票/已开票/合同中/已回款/已预付)
 ```
+
+### 2.2.1 内置枚举: 发票状态 (5 个, 写死在代码里, 不进字典)
+
+```javascript
+// app/core.js
+const BUILTIN_INVOICE_STATUSES = ['未开发票', '已开票', '合同中', '已回款', '已预付'];
+```
+
+- 字典管理 UI 不显示"发票状态" tab (内置, 不能编辑)
+- 表单的"发票状态"字段仍然下拉, 但下拉选项是写死的
+- 字段说明页标注: "发票状态 (内置, 不可编辑)"
+
+### 2.2.2 内置汇率 (硬编码, v3.0 简化版)
+
+```javascript
+// app/core.js
+const EXCHANGE_RATES_TO_RMB = { USD: 7.2, SGD: 5.3, RMB: 1.0 };
+// 折算 RMB = amount_tax_included × EXCHANGE_RATES_TO_RMB[currency]
+```
+
+- v3.0 用硬编码汇率 (汇率会过期, 标 v3.1 加汇率表)
+- 导入 xlsx 时, 如果 N 列有值, 直接用; 如果没值, 按 amount × rate 算
+- 表单改 amount 或 currency 时, 折算 RMB 自动更新 (前端 onchange)
 
 ### 2.3 字段映射 (字典↔商机)
 
@@ -258,7 +280,7 @@ lose_reason   文本多值   (不入字典)            丢单原因
 note          自由文本   (不入字典)            备注
 ```
 
-### 3.8 字典管理 (现有 6 tab → 10 tab)
+### 3.8 字典管理 (现有 6 tab → 9 tab)
 
 | Tab | 字典 |
 |---|---|
@@ -269,9 +291,10 @@ note          自由文本   (不入字典)            备注
 | 业务/产品 | dict_products |
 | 销售渠道 | dict_sales_channels (新) |
 | 阶段 | dict_stages |
-| 发票状态 | dict_invoice_status (新) |
 | 币种 | dict_currencies |
 | 丢单原因 | dict_lose_reasons |
+
+注: 发票状态是内置枚举 (5 个), 不在字典管理里, 在表单里下拉选。
 
 ---
 
