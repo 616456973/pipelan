@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>RAS CRM</title>
+  <link rel="stylesheet" href="app/styles.css">
+  <script src="vendor/sheetjs/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="topbar">
+    <h1>RAS CRM</h1>
+    <button class="tab active" data-tab="dashboard">仪表盘</button>
+    <button class="tab" data-tab="list">商机</button>
+    <button class="tab" data-tab="form">新增</button>
+    <button class="tab" data-tab="analysis">分析</button>
+    <button class="tab" data-tab="dicts">字典</button>
+    <span class="spacer"></span>
+    <span class="file-info">
+      <span class="modified-indicator" id="mod-ind"></span>
+      <span id="file-name">(未打开)</span>
+    </span>
+    <button class="btn" id="open-btn">打开</button>
+    <button class="btn btn-primary" id="save-btn">保存</button>
+  </div>
+  <div class="container" id="content">
+    <div class="card"><p class="muted">请打开一个 xlsx 文件开始。</p></div>
+  </div>
+  <input type="file" id="file-input" accept=".xlsx" style="display:none">
+  <script src="app/core.js"></script>
+  <script src="app/ui-notify.js"></script>
+  <script>
+    // Tab navigation
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        if (typeof window['render' + tab[0].toUpperCase() + tab.slice(1)] === 'function') {
+          window['render' + tab[0].toUpperCase() + tab.slice(1)]();
+        }
+      };
+    });
+    // Modified indicator
+    function updateModInd() {
+      const ind = document.getElementById('mod-ind');
+      const name = document.getElementById('file-name');
+      if (CRM.state.fileName) name.textContent = CRM.state.fileName;
+      ind.classList.toggle('modified', CRM.state.modified);
+    }
+    setInterval(updateModInd, 500);
+    // Save / Open placeholders (Task 16 implements them)
+    document.getElementById('save-btn').onclick = () => { Notify.info('保存功能将在 Task 16 实现'); };
+    document.getElementById('open-btn').onclick = () => { document.getElementById('file-input').click(); };
+    document.getElementById('file-input').onchange = (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      Notify.info('打开功能将在 Task 16 实现: ' + f.name);
+    };
+    // beforeunload guard
+    window.addEventListener('beforeunload', (e) => {
+      if (CRM.state.modified) {
+        e.preventDefault();
+        e.returnValue = '有未保存的改动，确定离开？';
+      }
+    });
+  </script>
+</body>
+</html>
