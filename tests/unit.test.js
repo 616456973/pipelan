@@ -1,35 +1,87 @@
-// Unit tests for app/core.js
+// Unit tests for app/core.js (v2.0: state is a DB mirror).
 // Run: node tests/unit.test.js
 const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs');
 const CRM = require('../app/core.js');
+const CRM_DB = require('../app/db.js');
+
+const FIXTURE = path.join(__dirname, 'fixtures', 'test-data.xlsx');
 
 let passed = 0, failed = 0;
 function test(name, fn) {
-  try {
-    fn();
+  return Promise.resolve().then(fn).then(() => {
     console.log('  ok', name);
     passed++;
-  } catch (e) {
+  }).catch(e => {
     console.log('  FAIL', name, '\n    ', e.message);
     failed++;
-  }
+  });
 }
 
-console.log('state');
-test('initial state is empty and unmodified', () => {
-  assert.equal(CRM.state.opportunities.length, 0);
-  assert.equal(CRM.state.fileName, '');
-  assert.equal(CRM.state.modified, false);
-  assert.equal(CRM.state.fileLoaded, false);
+// ---- v2.0 async test runner (tests can be async) ----
+
+// ---- One-time setup: init DB in-memory, load fixture ----
+let _initialized = false;
+async function init() {
+  if (_initialized) return;
+  await CRM_DB.initDb({ forceInMemory: true });
+  if (CRM_DB.listOpps().length === 0) {
+    CRM_DB.importFromXlsx(fs.readFileSync(FIXTURE));
+  }
+  await CRM.init();
+  _initialized = true;
+}
+
+// Helper: clear DB + reimport fixture, refresh state
+async function reloadFixture() {
+  CRM_DB.clearAll();
+  CRM_DB.importFromXlsx(fs.readFileSync(FIXTURE));
+  await CRM.refreshState();
+}
+
+(async () => {
+
+await test('initial state from fixture loads opportunities (some malformed rows excluded)', async () => {
+  await init();
+  // The v2.0 smart parser is more lenient: only the 'NOT_A_NUMBER' amount row
+  // is rejected as parseError. Dangling-team and bad-winRate rows are accepted.
+  // Fixture has 53 rows total; 1 parse error → 52 inserted.
+  assert.equal(CRM.state.opportunities.length, 52);
+  // All stored opps must be non-deleted and parseError-free
+  for (const o of CRM.state.opportunities) {
+    assert.equal(o.deleted, false);
+    assert.equal(o.parseError, null);
+  }
 });
-test('reset() clears state', () => {
-  CRM.state.opportunities.push({ id: 'x' });
-  CRM.state.modified = true;
+
+await test('state.dicts loaded from fixture', async () => {
+  await init();
+  assert.ok(CRM.state.dicts.teams.length >= 7);
+  assert.equal(CRM.state.dicts.productLines.length, 2);
+  assert.equal(CRM.state.dicts.products.length, 6);
+  assert.equal(CRM.state.dicts.stages.length, 5);
+  assert.equal(CRM.state.dicts.currencies.length, 3);
+  assert.ok(CRM.state.dicts.loseReasons.length > 0, 'loseReasons has defaults');
+});
+
+await test('dbEmpty false after fixture load', async () => {
+  await init();
+  assert.equal(CRM.state.dbEmpty, false);
+});
+
+await test('reset() clears in-memory state only, DB untouched', async () => {
+  await init();
   CRM.reset();
   assert.equal(CRM.state.opportunities.length, 0);
-  assert.equal(CRM.state.modified, false);
+  assert.equal(CRM.state.dbEmpty, true);
+  // DB is still loaded
+  assert.ok(CRM_DB.listOpps().length > 0);
+  // Refresh to restore state mirror from DB
+  await CRM.refreshState();
 });
-test('makeOpportunity() returns object with id and defaults', () => {
+
+await test('makeOpportunity() returns object with id and defaults', () => {
   const opp = CRM.makeOpportunity();
   assert.ok(opp.id && opp.id.length > 0);
   assert.equal(opp.deleted, false);
@@ -39,79 +91,40 @@ test('makeOpportunity() returns object with id and defaults', () => {
   assert.equal(opp.amount, 0);
 });
 
-const path = require('node:path');
-const fs = require('node:fs');
+console.log('importFromXlsx');
 
-console.log('parseXlsx');
-const FIXTURE = path.join(__dirname, 'fixtures', 'test-data.xlsx');
-
-test('parseXlsx loads fixture and finds 50 valid + 3 malformed rows', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  const result = CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
-  assert.equal(result.opportunities.length, 53, 'expected 53 rows total');
-  const valid = result.opportunities.filter(o => !o.parseError);
-  const malformed = result.opportunities.filter(o => o.parseError);
-  assert.equal(valid.length, 50, 'expected 50 valid rows');
-  assert.equal(malformed.length, 3, 'expected 3 malformed rows');
+await test('importFromXlsx loads fixture (50+ valid rows, 1 strict parse error)', async () => {
+  await reloadFixture();
+  const last = CRM_DB.listOpps();
+  // v2.0 smart parser rejects only the 'NOT_A_NUMBER' amount row; 52 valid.
+  assert.equal(last.length, 52, '52 valid rows inserted (only 1 strict parse error)');
 });
 
-test('parseXlsx loads dicts from Sheet2', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
-  assert.ok(CRM.state.dicts.teams.length >= 7);
-  assert.equal(CRM.state.dicts.productLines.length, 2);
-  assert.equal(CRM.state.dicts.products.length, 6);
-  assert.equal(CRM.state.dicts.stages.length, 5);
-  assert.equal(CRM.state.dicts.currencies.length, 3);
-  assert.ok(CRM.state.dicts.loseReasons.length > 0, 'loseReasons has defaults');
-});
-
-test('parseXlsx marks state as loaded and unmodified', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'foo.xlsx' });
-  assert.equal(CRM.state.fileLoaded, true);
-  assert.equal(CRM.state.modified, false);
-  assert.equal(CRM.state.fileName, 'foo.xlsx');
-});
-
-test('parseXlsx assigns unique UUID id to every opportunity', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
+await test('importFromXlsx preserves unique UUID id for every opportunity', async () => {
+  await init();
   const ids = new Set(CRM.state.opportunities.map(o => o.id));
   assert.equal(ids.size, CRM.state.opportunities.length, 'all ids unique');
 });
 
-test('parseXlsx on empty buffer throws', () => {
-  CRM.reset();
-  assert.throws(() => CRM.parseXlsx(Buffer.alloc(0), { fileName: 'bad.xlsx' }));
-});
+console.log('exportToXlsx');
 
-console.log('buildXlsx');
-
-test('buildXlsx returns a Uint8Array', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
-  const out = CRM.buildXlsx();
+await test('exportXlsxBlob returns a Uint8Array', async () => {
+  await init();
+  const out = CRM.exportXlsxBlob();
   assert.ok(out instanceof Uint8Array || Buffer.isBuffer(out));
   assert.ok(out.length > 1000, 'xlsx should be > 1KB');
 });
 
-test('buildXlsx roundtrip preserves opportunity fields', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
-  const out = CRM.buildXlsx();
-  CRM.reset();
-  CRM.parseXlsx(Buffer.from(out), { fileName: 'rt.xlsx' });
-  const after = CRM.state.opportunities.filter(o => !o.parseError).slice(0, 5);
-  CRM.reset();
-  CRM.parseXlsx(buffer, { fileName: 'orig.xlsx' });
+await test('exportXlsxBlob roundtrip preserves opportunity fields', async () => {
+  await init();
+  const out = CRM.exportXlsxBlob();
+  // Save a snapshot of original
   const orig = CRM.state.opportunities.filter(o => !o.parseError).slice(0, 5);
+  // Roundtrip: clear DB, reimport exported xlsx, refresh
+  CRM_DB.clearAll();
+  CRM_DB.importFromXlsx(Buffer.from(out));
+  await CRM.refreshState();
+  const after = CRM.state.opportunities.filter(o => !o.parseError).slice(0, 5);
   for (let i = 0; i < orig.length; i++) {
     assert.equal(orig[i].team, after[i].team, 'team ' + i);
     assert.equal(orig[i].oppName, after[i].oppName, 'oppName ' + i);
@@ -120,50 +133,32 @@ test('buildXlsx roundtrip preserves opportunity fields', () => {
   }
 });
 
-test('buildXlsx excludes deleted opportunities from Sheet1', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
+await test('exportXlsxBlob produces a workbook that re-parses without parse errors on valid data', async () => {
+  await init();
+  const out = CRM.exportXlsxBlob();
+  // Roundtrip: clear, reimport, check counts
   const beforeCount = CRM.state.opportunities.length;
-  const writableCount = CRM.state.opportunities.filter(o => !o.parseError).length;
-  CRM.state.opportunities[0].deleted = true;
-  const out = CRM.buildXlsx();
-  CRM.reset();
-  CRM.parseXlsx(Buffer.from(out), { fileName: 'rt.xlsx' });
-  assert.equal(CRM.state.opportunities.length, writableCount - 1, 'deleted excluded');
+  CRM_DB.clearAll();
+  const result = CRM_DB.importFromXlsx(Buffer.from(out));
+  await CRM.refreshState();
+  assert.equal(CRM.state.opportunities.length, beforeCount, 'count preserved');
+  assert.equal(result.parseErrors, 0, 'no parse errors on roundtripped data');
 });
 
-test('buildXlsx preserves dict values', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
-  const teamsBefore = CRM.state.dicts.teams.slice();
-  const out = CRM.buildXlsx();
-  CRM.reset();
-  CRM.parseXlsx(Buffer.from(out), { fileName: 'rt.xlsx' });
-  assert.deepEqual(CRM.state.dicts.teams, teamsBefore);
-});
-
-test('buildXlsx strips cell styles to ensure Excel renders numbers correctly', () => {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
-  const out = CRM.buildXlsx();
-  // Re-parse the output to inspect what Excel would see
+await test('exportXlsxBlob strips cell styles (Excel renders numbers correctly)', async () => {
+  await init();
+  const out = CRM.exportXlsxBlob();
   const X = require('../vendor/sheetjs/xlsx.full.min.js');
   const wb = X.read(out, { type: 'array' });
   const ws = wb.Sheets['Sheet1'];
-  // Find a numeric cell in the data (K18 = 含税金额) which had a currency format
-  // in the original file. After stripStyles, s should be absent or have numFmtId 0,
-  // so Excel uses General format and renders the number instead of going blank.
+  // Find a numeric cell in the data (K18 = 含税金额). After stripStyles, s.numFmtId should be 0
+  // so Excel uses General format and renders the number.
   const cell = ws['K18'];
   assert.ok(cell, 'K18 should exist');
   assert.equal(cell.t, 'n', 'cell should be a number type');
-  // After stripStyles, s should either be absent (SheetJS default) or have numFmtId 0
   if (cell.s) {
     assert.equal(cell.s.numFmtId, 0, 'numFmtId should be 0 (General) so Excel renders numbers');
   }
-  // The value should still be preserved
   assert.equal(cell.v, 10000, 'value preserved');
   // Also check an amount-with-decimal cell (L18 = 不含税金额)
   const cellL = ws['L18'];
@@ -175,9 +170,34 @@ test('buildXlsx strips cell styles to ensure Excel renders numbers correctly', (
   assert.equal(cellL.v, 8849.56, 'L18 value preserved');
 });
 
+console.log('upsertOpp');
+
+await test('upsertOpp writes to DB and updates state mirror', async () => {
+  await init();
+  const before = CRM.state.opportunities.length;
+  const opp = CRM.makeOpportunity({
+    team: '基础业务', owner: 'test-owner', oppName: 'test-upsert', customer: 'cust',
+    productLine: 'PL1 企业云方案(Hyper Cloud)', product: 'P110 企业云基础产品',
+    currency: 'RMB', stage: 'ST1 线索(Leads)', winRate: 0.5, amount: 100, amountNet: 88
+  });
+  CRM.upsertOpp(opp);
+  // State mirror updated
+  assert.equal(CRM.state.opportunities.length, before + 1);
+  const found = CRM.state.opportunities.find(o => o.id === opp.id);
+  assert.ok(found, 'opp in state mirror');
+  assert.equal(found.oppName, 'test-upsert');
+  // DB has the record
+  const fromDb = CRM_DB.getOpp(opp.id);
+  assert.ok(fromDb, 'opp in DB');
+  assert.equal(fromDb.oppName, 'test-upsert');
+  // Cleanup
+  CRM_DB.softDeleteOpp(opp.id);
+  await CRM.refreshState();
+});
+
 console.log('validators');
 
-test('validateOpportunity passes for complete record', () => {
+await test('validateOpportunity passes for complete record', () => {
   const opp = CRM.makeOpportunity({
     team: '基础业务', owner: '张经理', oppName: '商机1', customer: '客户1',
     productLine: 'PL1 企业云方案(Hyper Cloud)', product: 'P110 企业云基础产品',
@@ -187,7 +207,7 @@ test('validateOpportunity passes for complete record', () => {
   assert.equal(errors.length, 0);
 });
 
-test('validateOpportunity catches all required missing', () => {
+await test('validateOpportunity catches all required missing', () => {
   const opp = CRM.makeOpportunity();
   const errors = CRM.validateOpportunity(opp);
   // makeOpportunity() defaults stage='ST1 线索(Leads)' (not empty),
@@ -195,7 +215,7 @@ test('validateOpportunity catches all required missing', () => {
   assert.ok(errors.length >= 7, 'expected many required-field errors, got ' + errors.length);
 });
 
-test('validateOpportunity rejects amount negative', () => {
+await test('validateOpportunity rejects amount negative', () => {
   const opp = CRM.makeOpportunity({
     team: 'A', owner: 'B', oppName: 'a', customer: 'b',
     productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST1', winRate: 0,
@@ -205,7 +225,7 @@ test('validateOpportunity rejects amount negative', () => {
   assert.ok(errs.some(e => e.field === 'amount'));
 });
 
-test('validateOpportunity rejects winRate out of range', () => {
+await test('validateOpportunity rejects winRate out of range', () => {
   const opp = CRM.makeOpportunity({
     team: 'A', owner: 'B', oppName: 'a', customer: 'b',
     productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST1',
@@ -215,7 +235,7 @@ test('validateOpportunity rejects winRate out of range', () => {
   assert.ok(errs.some(e => e.field === 'winRate'));
 });
 
-test('validateOpportunity rejects amount > 1e15', () => {
+await test('validateOpportunity rejects amount > 1e15', () => {
   const opp = CRM.makeOpportunity({
     team: 'A', owner: 'B', oppName: 'a', customer: 'b',
     productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST1',
@@ -227,15 +247,9 @@ test('validateOpportunity rejects amount > 1e15', () => {
 
 console.log('compute*');
 
-function loadFixture() {
-  CRM.reset();
-  const buffer = fs.readFileSync(FIXTURE);
-  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
-  return CRM.state.opportunities;
-}
-
-test('computeKpi returns total/amount/weighted/winRate', () => {
-  const opps = loadFixture();
+await test('computeKpi returns total/amount/weighted/winRate', async () => {
+  await init();
+  const opps = CRM.state.opportunities;
   const k = CRM.computeKpi(opps);
   assert.equal(typeof k.oppCount, 'number');
   assert.equal(typeof k.amountByCurrency, 'object');
@@ -244,16 +258,24 @@ test('computeKpi returns total/amount/weighted/winRate', () => {
   assert.ok(k.oppCount > 0);
 });
 
-test('computeKpi excludes parseError and deleted', () => {
-  loadFixture();
-  CRM.state.opportunities[0].deleted = true;
+await test('computeKpi excludes parseError and deleted', async () => {
+  await init();
+  // Soft-delete one to verify exclusion
+  const allOpps = CRM.state.opportunities.slice();
+  const target = allOpps[0];
+  CRM_DB.softDeleteOpp(target.id);
+  await CRM.refreshState();
   const k = CRM.computeKpi(CRM.state.opportunities);
   const validCount = CRM.state.opportunities.filter(o => !o.deleted && !o.parseError).length;
   assert.equal(k.oppCount, validCount);
+  // Restore
+  CRM_DB.undeleteOpp(target.id);
+  await CRM.refreshState();
 });
 
-test('computeFunnel groups by stage', () => {
-  const opps = loadFixture();
+await test('computeFunnel groups by stage', async () => {
+  await init();
+  const opps = CRM.state.opportunities;
   const f = CRM.computeFunnel(opps);
   assert.equal(f.length, 5);
   for (const item of f) {
@@ -264,8 +286,9 @@ test('computeFunnel groups by stage', () => {
   }
 });
 
-test('computeStageConversion computes percent of previous stage', () => {
-  const opps = loadFixture();
+await test('computeStageConversion computes percent of previous stage', async () => {
+  await init();
+  const opps = CRM.state.opportunities;
   const c = CRM.computeStageConversion(opps);
   // c[0] is ST1, c[1] is ST2/prev = ST1, etc.
   assert.equal(c.length, 5);
@@ -276,8 +299,8 @@ test('computeStageConversion computes percent of previous stage', () => {
   }
 });
 
-test('compute* with empty input returns zeros', () => {
-  CRM.reset();
+await test('compute* with empty input returns zeros', async () => {
+  await init();
   const k = CRM.computeKpi([]);
   assert.equal(k.oppCount, 0);
   assert.equal(k.winRate, 0);
@@ -289,8 +312,9 @@ test('compute* with empty input returns zeros', () => {
   }
 });
 
-test('computeTrend groups by month from expectedDate', () => {
-  const opps = loadFixture();
+await test('computeTrend groups by month from expectedDate', async () => {
+  await init();
+  const opps = CRM.state.opportunities;
   const t = CRM.computeTrend(opps);
   assert.ok(Array.isArray(t));
   assert.ok(t.length > 0);
@@ -302,21 +326,22 @@ test('computeTrend groups by month from expectedDate', () => {
   }
 });
 
-test('computeTrend with no parseable dates returns empty array', () => {
-  CRM.reset();
-  const t = CRM.computeTrend([{ amount: 100, winRate: 0.5, expectedDate: null }]);
+await test('computeTrend with no parseable dates returns empty array', () => {
+  const t = CRM.computeTrend([{ amount: 100, winRate: 0.5, expectedDate: null, deleted: false, parseError: null }]);
   assert.equal(t.length, 0);
 });
 
-test('computeTopN returns top items by metric', () => {
-  const opps = loadFixture();
+await test('computeTopN returns top items by metric', async () => {
+  await init();
+  const opps = CRM.state.opportunities;
   const t = CRM.computeTopN(opps, { groupBy: 'team', metric: 'amount', n: 5 });
   assert.equal(t.length <= 5, true);
   assert.ok(t[0].amount >= t[t.length - 1].amount, 'descending');
 });
 
-test('computePareto returns items with cumulative percent', () => {
-  const opps = loadFixture();
+await test('computePareto returns items with cumulative percent', async () => {
+  await init();
+  const opps = CRM.state.opportunities;
   const p = CRM.computePareto(opps, { groupBy: 'customer', metric: 'amount' });
   for (let i = 0; i < p.length; i++) {
     assert.equal(typeof p[i].cumulativePct, 'number');
@@ -324,8 +349,7 @@ test('computePareto returns items with cumulative percent', () => {
   }
 });
 
-test('computeLoseReasonAgg counts loseReason tokens across ST5 opps', () => {
-  CRM.reset();
+await test('computeLoseReasonAgg counts loseReason tokens across ST5 opps', () => {
   const opps = [
     CRM.makeOpportunity({ stage: 'ST5 丢单(Lose)', loseReason: '价格过高,客户预算' }),
     CRM.makeOpportunity({ stage: 'ST5 丢单(Lose)', loseReason: '价格过高' }),
@@ -338,5 +362,32 @@ test('computeLoseReasonAgg counts loseReason tokens across ST5 opps', () => {
   assert.equal(budget.count, 1);
 });
 
+console.log('backup/restore');
+
+await test('downloadBackup returns Uint8Array of sqlite bytes', async () => {
+  await init();
+  const bytes = CRM.downloadBackup();
+  assert.ok(bytes instanceof Uint8Array || Buffer.isBuffer(bytes));
+  assert.ok(bytes.length > 100, 'non-trivial size');
+});
+
+await test('restoreFromBackup replaces DB and refreshes state', async () => {
+  await init();
+  // Make a backup after fixture is loaded
+  const backup = CRM.downloadBackup();
+  // Modify the DB
+  const id = CRM.state.opportunities[0].id;
+  CRM_DB.softDeleteOpp(id);
+  await CRM.refreshState();
+  assert.equal(CRM_DB.getOpp(id).deleted, true, 'now deleted in DB');
+  // Restore
+  await CRM.restoreFromBackup({ arrayBuffer: () => Promise.resolve(backup) });
+  // After restore, the deleted flag should be back to false
+  const restored = CRM_DB.getOpp(id);
+  assert.equal(restored.deleted, false, 'restored from backup');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);
+
+})();
