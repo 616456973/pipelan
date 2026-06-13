@@ -5,7 +5,14 @@
 
   // ---- Node-only deps (no-op in browser) ----
   const nodePath = (typeof require !== 'undefined') ? require('node:path') : null;
-  const XLSX_IO = (typeof require !== 'undefined') ? require('./xlsx-io.js') : null;
+  const XLSX_IO_NODE = (typeof require !== 'undefined') ? require('./xlsx-io.js') : null;
+  // In browser, xlsx-io.js loads as <script> and exposes window.CRM_XLSX.
+  function getXlsxIo() {
+    if (XLSX_IO_NODE) return XLSX_IO_NODE;
+    if (typeof globalThis !== 'undefined' && globalThis.CRM_XLSX) return globalThis.CRM_XLSX;
+    if (typeof window !== 'undefined' && window.CRM_XLSX) return window.CRM_XLSX;
+    throw new Error('xlsx-io.js not loaded. Ensure vendor/sheetjs/xlsx.full.min.js and app/xlsx-io.js are loaded as <script> tags before app/db.js');
+  }
 
   // ---- Lazy init ----
   let SQL = null;
@@ -263,8 +270,7 @@
 
   // ---- xlsx import / export ----
   function importFromXlsx(xlsxBuffer) {
-    if (!XLSX_IO) throw new Error('xlsx-io not available (browser mode uses global CRM_XLSX)');
-    const { opportunities, dicts } = XLSX_IO.parseXlsxSmart(xlsxBuffer);
+    const {opportunities, dicts} = getXlsxIo().parseXlsxSmart(xlsxBuffer);
     // Clear all tables
     clearAll();
     // Insert dicts
@@ -289,9 +295,8 @@
   }
 
   function exportToXlsx() {
-    if (!XLSX_IO) throw new Error('xlsx-io not available (browser mode uses global CRM_XLSX)');
     const state = loadAllToState();
-    return XLSX_IO.buildXlsxFromState(state);
+    return getXlsxIo().buildXlsxFromState(state);
   }
 
   function exportBackup() {
