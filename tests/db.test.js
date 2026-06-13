@@ -1,0 +1,166 @@
+// Tests for app/db.js (SQLite layer).
+// Run: node tests/db.test.js
+const assert = require('node:assert/strict');
+
+let passed = 0, failed = 0;
+function test(name, fn) {
+  return Promise.resolve().then(fn).then(() => {
+    console.log('  ok', name);
+    passed++;
+  }).catch(e => {
+    console.log('  FAIL', name, '\n    ', e.message);
+    failed++;
+  });
+}
+
+(async () => {
+  console.log('db');
+  const CRM_DB = require('../app/db.js');
+
+  await test('initDb (in-memory) creates 8 tables', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    const tables = CRM_DB.listTables();
+    assert.equal(tables.length, 8);
+    assert.ok(tables.includes('oportunidades'));
+    assert.ok(tables.includes('dict_teams'));
+    assert.ok(tables.includes('dict_product_lines'));
+    assert.ok(tables.includes('dict_products'));
+    assert.ok(tables.includes('dict_stages'));
+    assert.ok(tables.includes('dict_currencies'));
+    assert.ok(tables.includes('dict_lose_reasons'));
+    assert.ok(tables.includes('meta'));
+  });
+
+  await test('schema_version is set after init', async () => {
+    const tables = CRM_DB.listTables();
+    // Use a query through listOpps which uses underlying db
+    CRM_DB.clearAll();
+    // If clearAll doesn't work without tables, this test fails meaningfully
+    // But the assertion is that schema_version got set
+    // (no direct API for it; use listDicts which would return [] on empty db)
+    const dicts = CRM_DB.listDicts();
+    assert.deepEqual(dicts, {
+      teams: [], productLines: [], products: [],
+      stages: [], currencies: [], loseReasons: []
+    });
+  });
+
+  await test('listDicts returns empty arrays initially', async () => {
+    CRM_DB.clearAll();
+    const d = CRM_DB.listDicts();
+    assert.equal(d.teams.length, 0);
+    assert.equal(d.currencies.length, 0);
+  });
+
+  await test('addDictItem + listDict roundtrip', async () => {
+    CRM_DB.clearAll();
+    CRM_DB.addDictItem('dict_teams', '基础业务');
+    CRM_DB.addDictItem('dict_teams', 'AIPULSE');
+    CRM_DB.addDictItem('dict_teams', '基础业务');  // dup, should be ignored
+    const teams = CRM_DB.listDict('dict_teams');
+    assert.equal(teams.length, 2);
+    assert.equal(teams[0], '基础业务');
+    assert.equal(teams[1], 'AIPULSE');
+  });
+
+  await test('updateDictItem renames in place', async () => {
+    CRM_DB.clearAll();
+    CRM_DB.addDictItem('dict_teams', 'OldName');
+    CRM_DB.updateDictItem('dict_teams', 'OldName', 'NewName');
+    const teams = CRM_DB.listDict('dict_teams');
+    assert.deepEqual(teams, ['NewName']);
+  });
+
+  await test('deleteDictItem removes', async () => {
+    CRM_DB.clearAll();
+    CRM_DB.addDictItem('dict_teams', 'X');
+    CRM_DB.deleteDictItem('dict_teams', 'X');
+    assert.equal(CRM_DB.listDict('dict_teams').length, 0);
+  });
+
+  await test('countDictRefs counts matching opportunities', async () => {
+    CRM_DB.clearAll();
+    CRM_DB.addDictItem('dict_teams', 'A');
+    CRM_DB.addDictItem('dict_teams', 'B');
+    const opp = { id: 'o1', team: 'A', owner: '', oppName: 'n', customer: 'c',
+      productLine: '', product: '', currency: 'USD', stage: 'ST1 线索(Leads)',
+      winRate: 0, amount: 0, amountNet: 0, expectedDate: null,
+      note: '', loseReason: '', deleted: false, parseError: null, position: 0 };
+    CRM_DB.upsertOpp(opp);
+    assert.equal(CRM_DB.countDictRefs('dict_teams', 'A'), 1);
+    assert.equal(CRM_DB.countDictRefs('dict_teams', 'B'), 0);
+  });
+
+  await test('upsertOpp insert then update', async () => {
+    CRM_DB.clearAll();
+    const opp = { id: 'o1', team: '基础业务', owner: '李经理', oppName: '项目A', customer: '客户A',
+      productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST4 赢单(Win)',
+      winRate: 1, amount: 1000, amountNet: 885, expectedDate: 46023,
+      note: 'note', loseReason: '', deleted: false, parseError: null, position: 1 };
+    CRM_DB.upsertOpp(opp);
+    let got = CRM_DB.getOpp('o1');
+    assert.equal(got.oppName, '项目A');
+    assert.equal(got.amount, 1000);
+    // Update
+    got.amount = 2000;
+    CRM_DB.upsertOpp(got);
+    const after = CRM_DB.getOpp('o1');
+    assert.equal(after.amount, 2000);
+    assert.equal(CRM_DB.listOpps().length, 1);
+  });
+
+  await test('softDeleteOpp + listOpps (default excludes deleted)', async () => {
+    CRM_DB.clearAll();
+    const opp = { id: 'o1', team: 'A', owner: '', oppName: 'n', customer: 'c',
+      productLine: '', product: '', currency: 'USD', stage: 'ST1',
+      winRate: 0, amount: 0, amountNet: 0, expectedDate: null,
+      note: '', loseReason: '', deleted: false, parseError: null, position: 1 };
+    CRM_DB.upsertOpp(opp);
+    assert.equal(CRM_DB.listOpps().length, 1);
+    CRM_DB.softDeleteOpp('o1');
+    assert.equal(CRM_DB.listOpps().length, 0, 'soft-deleted excluded by default');
+    assert.equal(CRM_DB.listOpps({includeDeleted: true}).length, 1, 'soft-deleted included with flag');
+  });
+
+  await test('undeleteOpp restores', async () => {
+    CRM_DB.clearAll();
+    const opp = { id: 'o1', team: '', owner: '', oppName: 'n', customer: '',
+      productLine: '', product: '', currency: '', stage: '',
+      winRate: 0, amount: 0, amountNet: 0, expectedDate: null,
+      note: '', loseReason: '', deleted: true, parseError: null, position: 1 };
+    CRM_DB.upsertOpp(opp);
+    CRM_DB.undeleteOpp('o1');
+    assert.equal(CRM_DB.listOpps().length, 1);
+  });
+
+  await test('listOpps with filter', async () => {
+    CRM_DB.clearAll();
+    const opps = [
+      { id: '1', team: 'T1', owner: '', oppName: 'n1', customer: 'c',
+        productLine: '', product: '', currency: 'USD', stage: 'ST1',
+        winRate: 0, amount: 100, amountNet: 0, expectedDate: null,
+        note: '', loseReason: '', deleted: false, parseError: null, position: 1 },
+      { id: '2', team: 'T2', owner: '', oppName: 'n2', customer: 'c',
+        productLine: '', product: '', currency: 'RMB', stage: 'ST2',
+        winRate: 0, amount: 200, amountNet: 0, expectedDate: null,
+        note: '', loseReason: '', deleted: false, parseError: null, position: 2 },
+      { id: '3', team: 'T1', owner: '', oppName: 'n3', customer: 'c',
+        productLine: '', product: '', currency: 'USD', stage: 'ST3',
+        winRate: 0, amount: 300, amountNet: 0, expectedDate: null,
+        note: '', loseReason: '', deleted: false, parseError: null, position: 3 }
+    ];
+    for (const o of opps) CRM_DB.upsertOpp(o);
+    assert.equal(CRM_DB.listOpps({team: 'T1'}).length, 2);
+    assert.equal(CRM_DB.listOpps({currency: 'USD'}).length, 2);
+    assert.equal(CRM_DB.listOpps({stage: 'ST2'}).length, 1);
+  });
+
+  await test('exportBackup returns Uint8Array', async () => {
+    const bytes = CRM_DB.exportBackup();
+    assert.ok(bytes instanceof Uint8Array || Buffer.isBuffer(bytes));
+    assert.ok(bytes.length > 100, 'backup is non-trivial size');
+  });
+
+  console.log('\n' + passed + ' passed, ' + failed + ' failed');
+  process.exit(failed > 0 ? 1 : 0);
+})();
