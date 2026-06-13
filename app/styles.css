@@ -235,3 +235,44 @@ tfoot tr td { background: var(--surface-2); font-weight: 600; border-top: 2px so
 .filters select, .filters input { padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; background: #fff; }
 .filters input { min-width: 180px; }
 .filters .clear { color: var(--danger); font-size: 12px; cursor: pointer; padding: 4px 8px; }
+
+/* === v3.0.1 视觉升级 === */
+
+/* KPI 卡片多彩 */
+.kpi.k-blue::before { background: linear-gradient(90deg, #2563eb, #3b82f6); }
+.kpi.k-green::before { background: linear-gradient(90deg, #059669, #10b981); }
+.kpi.k-purple::before { background: linear-gradient(90deg, #7c3aed, #8b5cf6); }
+.kpi.k-orange::before { background: linear-gradient(90deg, #ea580c, #f59e0b); }
+.kpi.k-cyan::before { background: linear-gradient(90deg, #0891b2, #06b6d4); }
+.kpi.k-pink::before { background: linear-gradient(90deg, #db2777, #ec4899); }
+.kpi .sub { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+
+/* 表格数字右对齐 */
+table td.num, table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 阶段颜色 chip */
+.tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 1.6; }
+.tag.stage-st1 { background: #f1f5f9; color: #475569; }
+.tag.stage-st2 { background: #dbeafe; color: #1d4ed8; }
+.tag.stage-st3 { background: #ede9fe; color: #6d28d9; }
+.tag.stage-st4 { background: #d1fae5; color: #047857; }
+.tag.stage-st5 { background: #fee2e2; color: #b91c1c; }
+.tag.stage-other { background: #fed7aa; color: #9a3412; }
+
+/* 发票状态颜色 chip */
+.tag.inv-paid { background: #d1fae5; color: #047857; }       /* 已开票 */
+.tag.inv-collected { background: #dbeafe; color: #1d4ed8; } /* 已回款 */
+.tag.inv-prepaid { background: #fef3c7; color: #a16207; }   /* 已预付 */
+.tag.inv-contracting { background: #ede9fe; color: #6d28d9; }/* 合同中 */
+.tag.inv-empty { background: #f1f5f9; color: #475569; }     /* 未填 */
+.tag.inv-other { background: #fed7aa; color: #9a3412; }
+
+/* 表格 tfoot 合计行 */
+tfoot tr td { background: var(--surface-2); font-weight: 600; border-top: 2px solid var(--border); }
+
+/* 字段说明页 FAQ 卡片 h3 略大 */
+.card h3 { font-size: 15px; font-weight: 600; margin: 14px 0 10px; color: var(--text-2); }
+
+/* grid-2 默认 1fr 1fr */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
