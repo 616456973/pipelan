@@ -189,29 +189,54 @@
   }
 
   function funnelHtml(funnel) {
-    const max = Math.max(1, ...funnel.map(f => f.amount));
-    return funnel.map(f => {
-      const widthPct = (f.amount / max) * 100;
-      // Extract ST code from stage label like "ST1:线索(Leads)"
+    if (!funnel.length) return '<p class="muted">（无数据）</p>';
+    // Use the FIRST stage's count as the reference (100% width)
+    const maxCount = Math.max(1, funnel[0].count);
+    return funnel.map((f, i) => {
       const m = (f.stage || '').toUpperCase().match(/ST\s*([1-9])/);
-      const stCode = m ? 'ST' + m[1] : '';
-      const nav = stCode ? `data-nav='list|${stCode}'` : '';
-      return `<div class="stage" ${nav} style="width:${Math.max(20, widthPct)}%;" title="点击筛选 ${f.stage} 的商机">
-        <span class="name">${f.stage}</span>
-        <span class="meta">${f.count} 条 / ${f.amount.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
-      </div>`;
+      const stCode = m ? 'ST' + m[1] : 'st' + (i + 1);
+      const stClass = m ? 'st' + m[1] : 'st-other';
+      const widthPct = Math.max(2, (f.count / maxCount) * 100);
+      const nav = m ? `data-nav='list|ST${m[1]}'` : '';
+      return `<div class="funnel-row" ${nav} title="点击筛选 ${f.stage} 的商机">
+      <div class="funnel-label">${f.stage}</div>
+      <div class="funnel-bar-wrap">
+        <div class="funnel-bar funnel-bar-${stClass}" style="width:${widthPct}%;"></div>
+      </div>
+      <div class="funnel-meta">
+        <b>${f.count}</b> 条
+        <div class="funnel-meta-sub">${f.amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+      </div>
+    </div>`;
     }).join('');
   }
 
   function trendBarsHtml(trend) {
     if (!trend.length) return '<p class="muted">无日期数据</p>';
     const max = Math.max(1, ...trend.map(t => t.weighted));
+    // Determine current year-month
+    const now = new Date();
+    const currentYM = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
     return `
     <div style="display:flex; align-items:flex-end; gap:4px; height:160px; border-bottom:1px solid var(--border);">
-      ${trend.map(t => `<div style="flex:1; background:linear-gradient(180deg,var(--primary),var(--accent)); height:${(t.weighted / max) * 100}%; min-height:2px; position:relative;" title="${t.month}: ${Math.round(t.weighted).toLocaleString()}"></div>`).join('')}
+      ${trend.map(t => {
+        const isPast = t.month < currentYM;
+        const isCurrent = t.month === currentYM;
+        const isFuture = t.month > currentYM;
+        const bg = isCurrent
+          ? 'linear-gradient(180deg, #f59e0b, #fbbf24)'  // current: orange highlight
+          : isPast
+            ? 'linear-gradient(180deg, #cbd5e0, #e2e8f0)'  // past: gray
+            : 'linear-gradient(180deg, var(--primary), var(--accent))';  // future: default
+        const heightPct = Math.max(2, (t.weighted / max) * 100);
+        return `<div class="trend-bar ${isCurrent ? 'trend-current' : ''} ${isPast ? 'trend-past' : ''}" style="flex:1; background:${bg}; height:${heightPct}%; min-height:2px; position:relative;" title="${t.month}: ${Math.round(t.weighted).toLocaleString()}${isCurrent ? ' (当前月)' : ''}${isPast ? ' (已过去)' : ' (未来)'}"></div>`;
+      }).join('')}
     </div>
     <div style="display:flex; gap:4px; font-size:10px; color:var(--muted); margin-top:4px;">
-      ${trend.map(t => `<div style="flex:1; text-align:center;">${t.month.slice(5)}</div>`).join('')}
+      ${trend.map(t => {
+        const isCurrent = t.month === currentYM;
+        return `<div style="flex:1; text-align:center; ${isCurrent ? 'color:var(--primary); font-weight:600;' : ''}">${t.month.slice(5)}${isCurrent ? ' ●' : ''}</div>`;
+      }).join('')}
     </div>
   `;
   }

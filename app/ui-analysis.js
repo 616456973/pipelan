@@ -187,6 +187,9 @@
     const ySelect = PIVOT_METRICS.map(m => `<option value="${m.key}" ${m.key === yMetric ? 'selected' : ''}>${m.label}</option>`).join('');
     return `<div class="card">
     <h3>多维透视 (${opps.length} 条数据)</h3>
+    <div class="callout info" style="margin: 8px 0 14px; padding: 10px 14px; background:#ecfeff; border-left:3px solid var(--info); border-radius:4px; font-size:12px; color:var(--text-2);">
+      💡 <b>多维透视</b> — 选 X 轴维度(行),选指标(列),系统会按 X 轴分组聚合。例如:X=负责人 + 指标=总金额,看每个负责人贡献多少合同额。占比列显示该值占总和的百分比。
+    </div>
     <div class="filters" style="margin-bottom:14px;">
       <label>X 轴 <select id="pv-x">${xSelect}</select></label>
       <label>指标 <select id="pv-y">${ySelect}</select></label>

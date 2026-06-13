@@ -105,12 +105,21 @@
           </select></div>
           <div class="field"><label>币种 *</label><select id="f-currency">${d.currencies.map(t => `<option value="${t}" ${t === opp.currency ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-currency"></div></div>
           <div class="field"><label>含税金额 *</label><input id="f-amount" type="number" step="0.01" value="${opp.amountTaxIncluded || opp.amount || 0}"><div class="err" id="err-amount"></div></div>
-          <div class="field"><label>赢率 (0-1) *</label><input id="f-winRate" type="number" step="0.01" min="0" max="1" value="${opp.winRate}"><div class="err" id="err-winRate"></div></div>
+          <div class="field">
+            <label>赢率 (0-1) *</label>
+            <input id="f-winRate" type="number" step="0.01" min="0" max="1" value="${opp.winRate}">
+            <div class="err" id="err-winRate"></div>
+            ${showLoseReason ? `
+              <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);">
+                <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:4px;">丢单原因 (ST5 阶段必选):</label>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                  ${d.loseReasons.map(r => `<label class="lose-reason-chip"><input type="checkbox" class="lose-reason-cb" value="${r}" ${(opp.loseReason || '').split(',').includes(r) ? 'checked' : ''}> ${r}</label>`).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
           <div class="field"><label>预计落单时间</label><input id="f-expectedDate" type="date" value="${serialToExcelDate(opp.expectedDate)}"></div>
           <div class="field" style="grid-column: span 2"><label>备注 (内部)</label><textarea id="f-note" rows="2">${opp.note || ''}</textarea></div>
-          ${showLoseReason ? `<div class="field" style="grid-column: span 2"><label>丢单原因 (多选)</label>
-            <div>${d.loseReasons.map(r => `<label><input type="checkbox" class="lose-reason-cb" value="${r}" ${(opp.loseReason || '').split(',').includes(r) ? 'checked' : ''}> ${r}</label>`).join(' ')}</div>
-          </div>` : ''}
         </div>
         <div style="margin-top:16px; display:flex; gap:8px;">
           <button class="btn btn-primary" id="form-save">保存</button>

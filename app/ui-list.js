@@ -61,6 +61,13 @@
     return d.toISOString().slice(0, 10);
   }
 
+  function excelDateToSerial(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr + 'T00:00:00Z');
+    if (isNaN(d.getTime())) return null;
+    return Math.round((d.getTime() / 86400000) + 25569);
+  }
+
   function renderFilters() {
     const customers = uniqueValues('customer');
     const owners = uniqueValues('owner');
@@ -150,7 +157,9 @@
           : `<span class="tag inv-${invCode(o.invoiceStatus)}">${o.invoiceStatus || ''}</span>`}</td>
         <td class="num">${(o.amountTaxIncluded || 0).toLocaleString()}</td>
         <td>${Math.round((o.winRate || 0) * 100)}%</td>
-        <td>${serialToDateStr(o.expectedDate)}</td>
+        <td>${isEditing
+          ? `<input type="date" id="ed-expectedDate-${safeId}" class="cell-edit" value="${serialToDateStr(o.expectedDate)}">`
+          : serialToDateStr(o.expectedDate)}</td>
         <td>${isEditing
           ? `<button class="btn btn-primary" onclick="window.__saveRow('${safeId}')">保存</button> <button class="btn" onclick="window.__cancelEdit()">取消</button>`
           : (o.deleted ? '已删除' : `<button class="btn" onclick="window.__startEdit('${safeId}')">编辑</button> <button class="btn btn-danger" onclick="deleteOpp('${safeId}')">删除</button>`)}</td>
@@ -290,14 +299,21 @@
     const oldOwner = opp.owner;
     const oldStage = opp.stage;
     const oldInvoice = opp.invoiceStatus;
-    // Read values from the 3 selects
+    const oldExpected = opp.expectedDate;
+    // Read values from the 3 selects + date input
     const ownerEl = document.getElementById('ed-owner-' + id);
     const stageEl = document.getElementById('ed-stage-' + id);
     const invEl = document.getElementById('ed-invoiceStatus-' + id);
+    const dateEl = document.getElementById('ed-expectedDate-' + id);
     if (!stageEl) return;  // row not in edit mode
     opp.owner = ownerEl ? ownerEl.value : '';
     opp.stage = stageEl.value;
     opp.invoiceStatus = invEl ? invEl.value : '';
+    if (dateEl && dateEl.value) {
+      opp.expectedDate = excelDateToSerial(dateEl.value);
+    } else {
+      opp.expectedDate = null;
+    }
     // Persist
     try { CRM_DB.upsertOpp(opp); } catch (e) { console.error('save failed', e); Notify.error('保存失败: ' + e.message); }
     editingId = null;
@@ -306,6 +322,7 @@
     if (oldOwner !== opp.owner) changes.push('负责人');
     if (oldStage !== opp.stage) changes.push('阶段');
     if (oldInvoice !== opp.invoiceStatus) changes.push('发票状态');
+    if (oldExpected !== opp.expectedDate) changes.push('预计落单');
     Notify.info('已保存' + (changes.length ? ': ' + changes.join('/') : ' (无变化)'));
   };
 
