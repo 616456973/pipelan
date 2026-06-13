@@ -1,4 +1,4 @@
-// 仪表盘 — 6 KPI cards + stage funnel + monthly trend + business line + top 10 owners + top 5 teams.
+// 仪表盘 — 4 KPI cards + hero header + stage funnel + monthly trend + business line + top 10 owners + top 5 teams.
 (function (global) {
   'use strict';
 
@@ -14,41 +14,116 @@
     const content = document.getElementById('content');
     const valid = opps.filter(o => !o.deleted && !o.parseError);
     const activeCustomers = new Set(valid.map(o => o.customer).filter(Boolean)).size;
+    const totalAmount = Object.values(k.amountByCurrency).reduce((s, v) => s + v, 0);
     const avgWinRate = valid.length ? (valid.reduce((s, o) => s + (o.winRate || 0), 0) / valid.length) : 0;
 
-    const amountHtml = Object.entries(k.amountByCurrency).map(([c, v]) => `${c} ${Math.round(v).toLocaleString()}`).join(' / ') || '0';
-    const weightedHtml = Object.entries(k.weightedByCurrency).map(([c, v]) => `${c} ${Math.round(v).toLocaleString()}`).join(' / ') || '0';
+    const fmtMoney = (v) => {
+      v = Number(v) || 0;
+      if (v >= 1e8) return '¥' + (v / 1e8).toFixed(2) + '亿';
+      if (v >= 1e4) return '¥' + (v / 1e4).toFixed(1) + '万';
+      return '¥' + Math.round(v).toLocaleString();
+    };
+
+    // Today's date for header
+    const today = new Date();
+    const hour = today.getHours();
+    const greeting = hour < 12 ? '早上好' : hour < 18 ? '下午好' : '晚上好';
+
+    // Build amountHtml by currency for "总金额" KPI
+    const amountHtml = Object.entries(k.amountByCurrency).map(([c, v]) => `${c} ${fmtMoney(v)}`).join(' / ') || '0';
 
     content.innerHTML = `
-    <h2>仪表盘</h2>
-    <div class="kpi-grid">
-      <div class="kpi k-blue"><div class="label">商机总数</div><div class="value">${k.oppCount}</div></div>
-      <div class="kpi k-purple"><div class="label">活跃客户数</div><div class="value">${activeCustomers}</div></div>
-      <div class="kpi k-orange"><div class="label">加权金额</div><div class="value">${weightedHtml}</div></div>
-      <div class="kpi k-green"><div class="label">赢单数 (ST4)</div><div class="value">${k.st4}</div></div>
-      <div class="kpi k-cyan"><div class="label">赢单率</div><div class="value">${(k.winRate * 100).toFixed(1)}%</div><div class="sub">ST4: ${k.st4} / ST5: ${k.st5}</div></div>
-      <div class="kpi k-pink"><div class="label">平均赢率</div><div class="value">${(avgWinRate * 100).toFixed(1)}%</div></div>
+    <!-- Hero header -->
+    <div class="dash-hero">
+      <div>
+        <div class="dash-hero-greeting">${greeting} 👋</div>
+        <div class="dash-hero-title">销售仪表盘</div>
+        <div class="dash-hero-sub">${today.toLocaleDateString('zh-CN', {year:'numeric', month:'long', day:'numeric', weekday:'long'})}</div>
+      </div>
+      <div class="dash-hero-stats">
+        <div class="dash-hero-stat">
+          <div class="dash-hero-stat-num">${k.oppCount}</div>
+          <div class="dash-hero-stat-label">商机</div>
+        </div>
+        <div class="dash-hero-stat-sep"></div>
+        <div class="dash-hero-stat">
+          <div class="dash-hero-stat-num">${activeCustomers}</div>
+          <div class="dash-hero-stat-label">客户</div>
+        </div>
+        <div class="dash-hero-stat-sep"></div>
+        <div class="dash-hero-stat">
+          <div class="dash-hero-stat-num">${k.st4}</div>
+          <div class="dash-hero-stat-label">赢单</div>
+        </div>
+      </div>
     </div>
-    <div class="grid-2" style="display:grid; grid-template-columns: 1fr 1fr; gap:18px;">
+
+    <!-- KPI cards (4 primary) -->
+    <div class="kpi-grid">
+      <div class="kpi k-blue">
+        <div class="kpi-icon">💰</div>
+        <div class="label">总合同金额</div>
+        <div class="value">${amountHtml}</div>
+        <div class="sub">按币种: ${Object.keys(k.amountByCurrency).join(', ') || '无'}</div>
+      </div>
+      <div class="kpi k-green">
+        <div class="kpi-icon">🎯</div>
+        <div class="label">赢单数 (ST4)</div>
+        <div class="value">${k.st4}</div>
+        <div class="sub">赢单率 ${(k.winRate * 100).toFixed(1)}% · ST5: ${k.st5}</div>
+      </div>
+      <div class="kpi k-purple">
+        <div class="kpi-icon">📊</div>
+        <div class="label">加权金额</div>
+        <div class="value">${fmtMoney(totalAmount > 0 ? totalAmount * avgWinRate : 0)}</div>
+        <div class="sub">按平均赢率 ${(avgWinRate * 100).toFixed(0)}% 估算</div>
+      </div>
+      <div class="kpi k-orange">
+        <div class="kpi-icon">👥</div>
+        <div class="label">活跃客户</div>
+        <div class="value">${activeCustomers}</div>
+        <div class="sub">${k.oppCount > 0 ? (k.oppCount / Math.max(activeCustomers, 1)).toFixed(1) : 0} 商机/客户</div>
+      </div>
+    </div>
+
+    <!-- Main visualizations (2x2) -->
+    <div class="grid-2 dash-grid">
       <div class="card">
-        <h3>阶段漏斗</h3>
-        <div class="funnel">${funnelHtml(funnel)}</div>
+        <div class="card-header">
+          <h3>阶段漏斗</h3>
+          <span class="card-tag">${funnel.reduce((s, f) => s + f.count, 0)} 条商机</span>
+        </div>
+        ${funnelHtml(funnel)}
       </div>
       <div class="card">
-        <h3>月度加权趋势</h3>
+        <div class="card-header">
+          <h3>月度加权趋势</h3>
+          <span class="card-tag">${trend.length} 个月</span>
+        </div>
         ${trendBarsHtml(trend)}
       </div>
       <div class="card">
-        <h3>业务线金额占比</h3>
+        <div class="card-header">
+          <h3>业务线金额占比</h3>
+          <span class="card-tag">TOP ${topBls.length}</span>
+        </div>
         ${topBarHtml(topBls, 'amount')}
       </div>
       <div class="card">
-        <h3>TOP 10 销售代表 (按加权金额)</h3>
+        <div class="card-header">
+          <h3>销售代表业绩 (TOP 10)</h3>
+          <span class="card-tag">按加权金额</span>
+        </div>
         ${topBarHtml(topOwners, 'weighted')}
       </div>
     </div>
-    <div class="card" style="margin-top:18px;">
-      <h3>TOP 5 团队 (按金额)</h3>
+
+    <!-- Bottom: TOP 5 teams full width -->
+    <div class="card dash-bottom">
+      <div class="card-header">
+        <h3>团队业绩 TOP 5</h3>
+        <span class="card-tag">按金额</span>
+      </div>
       ${topBarHtml(topTeams, 'amount')}
     </div>
   `;
