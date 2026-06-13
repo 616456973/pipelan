@@ -2,6 +2,10 @@
 
 A zero-dependency single-file HTML Web App for managing RAS CRM opportunity/sales data. The .xlsx file is the database.
 
+## Status
+
+**v1.0 release** — 2026-06-13. All 20 tasks complete. 27 unit tests + 4 compare tests pass. Verified against the user's real `RAS CRM（template） (version0529).xlsx`.
+
 ## Quick Start
 
 1. Double-click `ras_crm.html` to open in Chrome or Edge.
