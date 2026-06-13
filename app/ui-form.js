@@ -2,6 +2,23 @@
 (function (global) {
   'use strict';
 
+  const BUILTIN_INVOICE_STATUSES = ['未开发票', '已开票', '合同中', '已回款', '已预付'];
+  const STAGE_DEFAULT_WINRATE = { 'ST1': 0.1, 'ST2': 0.3, 'ST3': 0.5, 'ST4': 1, 'ST5': 0 };
+
+  function excelDateToSerial(dateStr) {
+    // dateStr in 'YYYY-MM-DD' format → Excel serial
+    const d = new Date(dateStr + 'T00:00:00Z');
+    if (isNaN(d.getTime())) return null;
+    return Math.round((d.getTime() / 86400000) + 25569);
+  }
+
+  function serialToExcelDate(serial) {
+    if (!serial) return '';
+    const d = new Date((Number(serial) - 25569) * 86400 * 1000);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().slice(0, 10);
+  }
+
   let editingId = null;  // null = new mode; otherwise editing existing opp.id
 
   function startNew() {
@@ -16,9 +33,9 @@
   function getFormData() {
     const v = (id) => document.getElementById(id).value;
     return {
+      oppName: v('f-oppName'),
       team: v('f-team-sel'),
       owner: v('f-owner'),
-      oppName: v('f-oppName'),
       customer: v('f-customer'),
       productLine: v('f-productLine'),
       product: v('f-product'),
@@ -26,8 +43,9 @@
       stage: v('f-stage'),
       winRate: parseFloat(v('f-winRate')),
       amount: parseFloat(v('f-amount')),
-      amountNet: parseFloat(v('f-amountNet')),
-      expectedDate: v('f-expectedDate') ? parseFloat(v('f-expectedDate')) : null,
+      expectedDate: v('f-expectedDate') ? excelDateToSerial(v('f-expectedDate')) : null,
+      invoiceStatus: v('f-invoiceStatus'),
+      salesChannel: v('f-salesChannel'),
       note: v('f-note'),
       loseReason: Array.from(document.querySelectorAll('.lose-reason-cb:checked')).map(cb => cb.value).join(',')
     };
@@ -57,18 +75,26 @@
       <div class="card">
         <div class="form-grid">
           <div class="field"><label>销售团队 *</label><select id="f-team-sel">${d.teams.map(t => `<option value="${t}" ${t === opp.team ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-team-sel"></div></div>
-          <div class="field"><label>负责人 *</label><input id="f-owner" value="${opp.owner || ''}"><div class="err" id="err-owner"></div></div>
           <div class="field"><label>商机名称 *</label><input id="f-oppName" value="${opp.oppName || ''}"><div class="err" id="err-oppName"></div></div>
-          <div class="field"><label>客户名称 *</label><input id="f-customer" value="${opp.customer || ''}"><div class="err" id="err-customer"></div></div>
+          <div class="field"><label>客户名称 *</label>
+            <input id="f-customer" list="dl-customers" value="${opp.customer || ''}">
+            <datalist id="dl-customers">${(CRM.state.dicts.customers || []).map(c => `<option value="${c}">`).join('')}</datalist>
+            <div class="err" id="err-customer"></div>
+          </div>
+          <div class="field"><label>负责人 *</label><input id="f-owner" value="${opp.owner || ''}"><div class="err" id="err-owner"></div></div>
           <div class="field"><label>业务线 *</label><select id="f-productLine">${d.productLines.map(t => `<option value="${t}" ${t === opp.productLine ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-productLine"></div></div>
           <div class="field"><label>业务/产品 *</label><select id="f-product">${productOptions.map(t => `<option value="${t}" ${t === opp.product ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-product"></div></div>
-          <div class="field"><label>币种 *</label><select id="f-currency">${d.currencies.map(t => `<option value="${t}" ${t === opp.currency ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-currency"></div></div>
+          <div class="field"><label>销售渠道</label><select id="f-salesChannel">${(d.salesChannels || []).map(t => `<option value="${t}" ${t === opp.salesChannel ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
           <div class="field"><label>阶段 *</label><select id="f-stage">${d.stages.map(t => `<option value="${t}" ${t === opp.stage ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-stage"></div></div>
+          <div class="field"><label>发票状态</label><select id="f-invoiceStatus">
+            <option value="">(无)</option>
+            ${BUILTIN_INVOICE_STATUSES.map(s => `<option value="${s}" ${s === opp.invoiceStatus ? 'selected' : ''}>${s}</option>`).join('')}
+          </select></div>
+          <div class="field"><label>币种 *</label><select id="f-currency">${d.currencies.map(t => `<option value="${t}" ${t === opp.currency ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-currency"></div></div>
+          <div class="field"><label>含税金额 *</label><input id="f-amount" type="number" step="0.01" value="${opp.amountTaxIncluded || opp.amount || 0}"><div class="err" id="err-amount"></div></div>
           <div class="field"><label>赢率 (0-1) *</label><input id="f-winRate" type="number" step="0.01" min="0" max="1" value="${opp.winRate}"><div class="err" id="err-winRate"></div></div>
-          <div class="field"><label>含税金额 *</label><input id="f-amount" type="number" step="0.01" value="${opp.amount}"><div class="err" id="err-amount"></div></div>
-          <div class="field"><label>不含税金额 *</label><input id="f-amountNet" type="number" step="0.01" value="${opp.amountNet}"><div class="err" id="err-amountNet"></div></div>
-          <div class="field"><label>预计成交/丢单时间 (Excel序列号)</label><input id="f-expectedDate" type="number" value="${opp.expectedDate === null ? '' : opp.expectedDate}"></div>
-          <div class="field" style="grid-column: span 2"><label>备注</label><textarea id="f-note" rows="2">${opp.note || ''}</textarea></div>
+          <div class="field"><label>预计落单时间</label><input id="f-expectedDate" type="date" value="${serialToExcelDate(opp.expectedDate)}"></div>
+          <div class="field" style="grid-column: span 2"><label>备注 (内部)</label><textarea id="f-note" rows="2">${opp.note || ''}</textarea></div>
           ${showLoseReason ? `<div class="field" style="grid-column: span 2"><label>丢单原因 (多选)</label>
             <div>${d.loseReasons.map(r => `<label><input type="checkbox" class="lose-reason-cb" value="${r}" ${(opp.loseReason || '').split(',').includes(r) ? 'checked' : ''}> ${r}</label>`).join(' ')}</div>
           </div>` : ''}
@@ -87,6 +113,16 @@
       sel.innerHTML = newOpts.map(t => `<option value="${t}">${t}</option>`).join('');
     };
     document.getElementById('f-stage').onchange = (e) => {
+      // 阶段变更时建议赢率
+      const stage = e.target.value || '';
+      const m = stage.toUpperCase().match(/ST\s*([1-9])/);
+      if (m) {
+        const key = 'ST' + m[1];
+        if (STAGE_DEFAULT_WINRATE[key] !== undefined) {
+          document.getElementById('f-winRate').value = STAGE_DEFAULT_WINRATE[key];
+        }
+      }
+      // If ST5, re-render to show lose reason
       if (e.target.value.indexOf('ST5') >= 0) {
         const oldStage = opp.stage;
         opp.stage = e.target.value;
@@ -100,6 +136,17 @@
           renderForm();
           opp.stage = oldStage;
         }
+      }
+    };
+
+    // 客户 blur 时自动加入 dict_customers
+    document.getElementById('f-customer').onblur = (e) => {
+      const v = (e.target.value || '').trim();
+      if (!v) return;
+      if (!CRM.state.dicts.customers.includes(v)) {
+        CRM.state.dicts.customers.push(v);
+        CRM.markModified();
+        Notify.info('已新增客户到字典: ' + v);
       }
     };
 
