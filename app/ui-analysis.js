@@ -1,4 +1,4 @@
-// 多维分析 — 8 views. Shares filterState with list page.
+// 多维分析 — 12 views. Shares filterState with list page.
 (function (global) {
   'use strict';
 
@@ -12,7 +12,11 @@
     { key: 'conversion', label: '5. 阶段转化率' },
     { key: 'lose', label: '6. 丢单原因汇总' },
     { key: 'pivot', label: '7. 多维透视' },
-    { key: 'st4st5', label: '8. ST4 vs ST5 对比' }
+    { key: 'st4st5', label: '8. ST4 vs ST5 对比' },
+    { key: 'ownerPerf', label: '9. 销售代表业绩' },
+    { key: 'overdue', label: '10. 逾期商机预警' },
+    { key: 'customer', label: '11. 客户集中度' },
+    { key: 'invoice', label: '12. 发票状态分布' }
   ];
 
   let pivotConfig = { xField: 'product', yMetric: 'amount' };
@@ -69,6 +73,10 @@
       if (py) py.onchange = (e) => { pivotConfig.yMetric = e.target.value; renderAnalysis(); };
     }
     else if (currentView === 'st4st5') body.innerHTML = viewSt4St5(opps);
+    else if (currentView === 'ownerPerf') body.innerHTML = viewOwnerPerf(opps);
+    else if (currentView === 'overdue') body.innerHTML = viewOverdue(opps);
+    else if (currentView === 'customer') body.innerHTML = viewCustomer(opps);
+    else if (currentView === 'invoice') body.innerHTML = viewInvoice(opps);
   }
 
   function viewFunnel(opps) {
@@ -210,6 +218,127 @@
         </tbody>
       </table>
     </div>`;
+  }
+
+  function viewOwnerPerf(opps) {
+    const groups = {};
+    for (const o of opps) {
+      const k = o.owner || '(未填)';
+      if (!groups[k]) groups[k] = { name: k, count: 0, amount: 0, weighted: 0, winCount: 0, winRateSum: 0 };
+      groups[k].count++;
+      groups[k].amount += (o.amountTaxIncluded || 0);
+      groups[k].weighted += (o.amountTaxIncluded || 0) * (o.winRate || 0);
+      groups[k].winRateSum += (o.winRate || 0);
+      if (o.stage && o.stage.indexOf('ST4') >= 0) groups[k].winCount++;
+    }
+    const arr = Object.values(groups).map(g => ({
+      ...g,
+      avgWinRate: g.count ? g.winRateSum / g.count : 0
+    })).sort((a, b) => b.weighted - a.weighted);
+    return `<div class="card">
+    <h3>销售代表业绩表 (${opps.length} 条数据, ${arr.length} 人)</h3>
+    ${arr.length ? `<table>
+      <thead><tr><th>负责人</th><th>商机数</th><th class="num">总金额</th><th class="num">加权金额</th><th>赢单数</th><th>平均赢率</th></tr></thead>
+      <tbody>${arr.map(i => `<tr>
+        <td>${i.name}</td>
+        <td>${i.count}</td>
+        <td class="num">${i.amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+        <td class="num">${i.weighted.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+        <td>${i.winCount}</td>
+        <td>${(i.avgWinRate * 100).toFixed(1)}%</td>
+      </tr>`).join('')}</tbody>
+    </table>` : '<p class="muted">（无数据）</p>'}
+  </div>`;
+  }
+
+  function viewOverdue(opps) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const overdue = [];
+    for (const o of opps) {
+      if (o.deleted || o.parseError) continue;
+      if (!o.expectedDate || isNaN(Number(o.expectedDate))) continue;
+      const d = new Date((Number(o.expectedDate) - 25569) * 86400 * 1000);
+      if (isNaN(d.getTime())) continue;
+      if (d >= today) continue;
+      if (o.stage && (o.stage.indexOf('ST4') >= 0 || o.stage.indexOf('ST5') >= 0)) continue;
+      const days = Math.floor((today - d) / (1000 * 60 * 60 * 24));
+      overdue.push({ opp: o, days, amount: o.amountRmbEquivalent || o.amountTaxIncluded || 0 });
+    }
+    overdue.sort((a, b) => b.amount - a.amount);
+    return `<div class="card">
+    <h3>逾期商机预警 (${overdue.length} 条,共逾期未成交)</h3>
+    ${overdue.length ? `<table>
+      <thead><tr><th>#</th><th>商机</th><th>客户</th><th>负责人</th><th>阶段</th><th>预计落单</th><th class="num">金额</th><th>逾期</th></tr></thead>
+      <tbody>${overdue.map((x, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${x.opp.oppName || ''}</td>
+        <td>${x.opp.customer || ''}</td>
+        <td>${x.opp.owner || ''}</td>
+        <td>${x.opp.stage || ''}</td>
+        <td>${new Date((Number(x.opp.expectedDate) - 25569) * 86400 * 1000).toISOString().slice(0, 10)}</td>
+        <td class="num">¥${Math.round(x.amount).toLocaleString()}</td>
+        <td><span class="tag tag-st5">${x.days} 天</span></td>
+      </tr>`).join('')}</tbody>
+    </table>` : '<p class="muted">（无逾期商机）</p>'}
+  </div>`;
+  }
+
+  function viewCustomer(opps) {
+    const groups = {};
+    for (const o of opps) {
+      const k = o.customer || '(未填)';
+      if (!groups[k]) groups[k] = { name: k, count: 0, amount: 0, weighted: 0, lastDate: 0 };
+      groups[k].count++;
+      groups[k].amount += (o.amountTaxIncluded || 0);
+      groups[k].weighted += (o.amountTaxIncluded || 0) * (o.winRate || 0);
+      if (o.expectedDate && Number(o.expectedDate) > groups[k].lastDate) {
+        groups[k].lastDate = Number(o.expectedDate);
+      }
+    }
+    const arr = Object.values(groups).map(g => ({
+      ...g,
+      lastDateStr: g.lastDate ? new Date((g.lastDate - 25569) * 86400 * 1000).toISOString().slice(0, 10) : '-'
+    })).sort((a, b) => b.amount - a.amount);
+    return `<div class="card">
+    <h3>客户集中度 (${opps.length} 条数据, ${arr.length} 客户)</h3>
+    ${arr.length ? `<table>
+      <thead><tr><th>#</th><th>客户</th><th>商机数</th><th class="num">总金额</th><th class="num">加权金额</th><th>最近商机时间</th></tr></thead>
+      <tbody>${arr.map((i, idx) => `<tr>
+        <td>${idx + 1}</td>
+        <td>${i.name}</td>
+        <td>${i.count}</td>
+        <td class="num">${i.amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+        <td class="num">${i.weighted.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+        <td>${i.lastDateStr}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : '<p class="muted">（无数据）</p>'}
+  </div>`;
+  }
+
+  function viewInvoice(opps) {
+    const BUILTIN_INVOICE_STATUSES = ['未开发票', '已开票', '合同中', '已回款', '已预付'];
+    const groups = {};
+    for (const s of BUILTIN_INVOICE_STATUSES) groups[s] = { name: s, count: 0, amount: 0 };
+    for (const o of opps) {
+      const s = o.invoiceStatus || '(未填)';
+      if (!groups[s]) groups[s] = { name: s, count: 0, amount: 0 };
+      groups[s].count++;
+      groups[s].amount += (o.amountTaxIncluded || 0);
+    }
+    const arr = Object.values(groups).filter(g => g.count > 0).sort((a, b) => b.amount - a.amount);
+    const max = Math.max(1, ...arr.map(i => i.amount));
+    return `<div class="card">
+    <h3>发票状态分布 (${opps.length} 条数据)</h3>
+    ${arr.length ? arr.map(i => `<div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+      <div style="width:100px; font-size:12px; text-align:right;">${i.name}</div>
+      <div style="flex:1; background:var(--border); border-radius:4px; height:20px;">
+        <div style="background:linear-gradient(90deg,var(--primary),var(--accent)); height:100%; width:${(i.amount / max) * 100}%; border-radius:4px;"></div>
+      </div>
+      <div style="width:80px; font-size:12px;">${i.count} 条</div>
+      <div style="width:120px; font-size:12px;" class="num">${i.amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+    </div>`).join('') : '<p class="muted">（无数据）</p>'}
+  </div>`;
   }
 
   global.renderAnalysis = renderAnalysis;
