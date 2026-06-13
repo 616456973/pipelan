@@ -21,6 +21,26 @@
 
   let pivotConfig = { xField: 'product', yMetric: 'amount' };
 
+  let topNConfig = { groupBy: 'team', metric: 'amount', n: 10 };
+
+  const TOPN_FIELDS = [
+    { key: 'team', label: '销售团队' },
+    { key: 'owner', label: '负责人' },
+    { key: 'customer', label: '客户' },
+    { key: 'product', label: '产品' },
+    { key: 'productLine', label: '业务线' },
+    { key: 'stage', label: '阶段' },
+    { key: 'salesChannel', label: '销售渠道' },
+    { key: 'invoiceStatus', label: '发票状态' }
+  ];
+
+  const TOPN_METRICS = [
+    { key: 'amount', label: '总金额' },
+    { key: 'weighted', label: '加权金额' },
+    { key: 'count', label: '数量' },
+    { key: 'avgAmount', label: '平均单笔金额' }
+  ];
+
   const PIVOT_FIELDS = [
     { key: 'product', label: '产品' },
     { key: 'productLine', label: '业务线' },
@@ -60,7 +80,15 @@
     const opps = filteredOpps();
     if (currentView === 'funnel') body.innerHTML = viewFunnel(opps);
     else if (currentView === 'trend') body.innerHTML = viewTrend(opps);
-    else if (currentView === 'topn') body.innerHTML = viewTopN(opps);
+    else if (currentView === 'topn') {
+      body.innerHTML = viewTopN(opps);
+      const tg = document.getElementById('tn-group');
+      const tm = document.getElementById('tn-metric');
+      const tn = document.getElementById('tn-n');
+      if (tg) tg.onchange = (e) => { topNConfig.groupBy = e.target.value; renderAnalysis(); };
+      if (tm) tm.onchange = (e) => { topNConfig.metric = e.target.value; renderAnalysis(); };
+      if (tn) tn.onchange = (e) => { topNConfig.n = parseInt(e.target.value, 10); renderAnalysis(); };
+    }
     else if (currentView === 'pareto') body.innerHTML = viewPareto(opps);
     else if (currentView === 'conversion') body.innerHTML = viewConversion(opps);
     else if (currentView === 'lose') body.innerHTML = viewLose(opps);
@@ -112,17 +140,61 @@
   }
 
   function viewTopN(opps) {
-    const t = CRM.computeTopN(opps, { groupBy: 'team', metric: 'amount', n: 10 });
-    const max = Math.max(1, ...t.map(i => i.amount));
+    const groupBy = topNConfig.groupBy;
+    const metric = topNConfig.metric;
+    const n = topNConfig.n;
+    const groups = {};
+    for (const o of opps) {
+      const k = o[groupBy] || '(未分类)';
+      if (!groups[k]) groups[k] = { name: k, count: 0, amount: 0, weighted: 0 };
+      groups[k].count++;
+      groups[k].amount += (o.amountTaxIncluded || 0);
+      groups[k].weighted += (o.amountTaxIncluded || 0) * (o.winRate || 0);
+    }
+    const arr = Object.values(groups).map(g => ({
+      ...g,
+      avgAmount: g.count ? g.amount / g.count : 0
+    })).sort((a, b) => (b[metric] || 0) - (a[metric] || 0)).slice(0, n);
+    const groupSelect = TOPN_FIELDS.map(f => `<option value="${f.key}" ${f.key === groupBy ? 'selected' : ''}>${f.label}</option>`).join('');
+    const metricSelect = TOPN_METRICS.map(m => `<option value="${m.key}" ${m.key === metric ? 'selected' : ''}>${m.label}</option>`).join('');
+    const groupLabel = TOPN_FIELDS.find(f => f.key === groupBy).label;
+    const metricLabel = TOPN_METRICS.find(m => m.key === metric).label;
+    const max = Math.max(1, ...arr.map(i => i[metric] || 0));
     return `<div class="card">
-      <h3>TOP 10 团队 (按金额)</h3>
-      ${t.length ? t.map(i => `<div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-        <div style="width:140px; font-size:12px; text-align:right;">${i.name}</div>
-        <div style="flex:1; background:#e3e8ef; border-radius:4px; height:20px;">
-          <div style="background:#2563eb; height:100%; width:${(i.amount / max) * 100}%; border-radius:4px;"></div>
-        </div>
-        <div style="width:100px; font-size:12px;">${i.amount.toLocaleString()}</div>
-      </div>`).join('') : '<p class="muted">（无数据）</p>'}
+      <h3>TOP ${n} 排名 (按${groupLabel}的${metricLabel})</h3>
+      <div class="filters" style="margin-bottom:14px;">
+        <label>分组 <select id="tn-group">${groupSelect}</select></label>
+        <label>指标 <select id="tn-metric">${metricSelect}</select></label>
+        <label>数量 <select id="tn-n">
+          <option value="5" ${n === 5 ? 'selected' : ''}>TOP 5</option>
+          <option value="10" ${n === 10 ? 'selected' : ''}>TOP 10</option>
+          <option value="20" ${n === 20 ? 'selected' : ''}>TOP 20</option>
+        </select></label>
+      </div>
+      ${arr.length ? `
+        <table>
+          <thead>
+            <tr>
+              <th class="rank">#</th>
+              <th>${groupLabel}</th>
+              <th class="num">数量</th>
+              <th class="num">总金额</th>
+              <th class="num">加权金额</th>
+              <th class="num">${metric === 'avgAmount' ? '平均金额' : metricLabel}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${arr.map((i, idx) => `<tr${idx < 3 ? ' class="row-top"' : ''}>
+              <td class="rank">${idx + 1}</td>
+              <td>${i.name}</td>
+              <td class="num">${i.count}</td>
+              <td class="num">${i.amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+              <td class="num">${i.weighted.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+              <td class="num"><b>${(i[metric] || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</b></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      ` : '<p class="muted">（无数据）</p>'}
     </div>`;
   }
 
@@ -171,21 +243,62 @@
   }
 
   function viewPivot(opps) {
-    const xField = pivotConfig.xField;
-    const yMetric = pivotConfig.yMetric;
-    const groups = {};
-    for (const o of opps) {
-      const k = o[xField] || '(未分类)';
-      if (!groups[k]) groups[k] = { name: k, count: 0, amount: 0, weighted: 0 };
-      groups[k].count++;
-      groups[k].amount += (o.amountTaxIncluded || 0);
-      groups[k].weighted += (o.amountTaxIncluded || 0) * (o.winRate || 0);
-    }
-    const arr = Object.values(groups).sort((a, b) => (b[yMetric] || 0) - (a[yMetric] || 0));
-    const total = arr.reduce((s, i) => s + (i[yMetric] || 0), 0) || 1;
-    const xSelect = PIVOT_FIELDS.map(f => `<option value="${f.key}" ${f.key === xField ? 'selected' : ''}>${f.label}</option>`).join('');
-    const ySelect = PIVOT_METRICS.map(m => `<option value="${m.key}" ${m.key === yMetric ? 'selected' : ''}>${m.label}</option>`).join('');
-    return `<div class="card">
+  const xField = pivotConfig.xField;
+  const yMetric = pivotConfig.yMetric;
+  const groups = {};
+  for (const o of opps) {
+    const k = o[xField] || '(未分类)';
+    if (!groups[k]) groups[k] = { name: k, count: 0, amount: 0, weighted: 0 };
+    groups[k].count++;
+    groups[k].amount += (o.amountTaxIncluded || 0);
+    groups[k].weighted += (o.amountTaxIncluded || 0) * (o.winRate || 0);
+  }
+  const arr = Object.values(groups).sort((a, b) => (b[yMetric] || 0) - (a[yMetric] || 0));
+  const total = arr.reduce((s, i) => s + (i[yMetric] || 0), 0) || 1;
+  const xLabel = PIVOT_FIELDS.find(f => f.key === xField).label;
+  const yLabel = PIVOT_METRICS.find(m => m.key === yMetric).label;
+  const xSelect = PIVOT_FIELDS.map(f => `<option value="${f.key}" ${f.key === xField ? 'selected' : ''}>${f.label}</option>`).join('');
+  const ySelect = PIVOT_METRICS.map(m => `<option value="${m.key}" ${m.key === yMetric ? 'selected' : ''}>${m.label}</option>`).join('');
+  // Summary
+  const topContrib = arr[0] || { name: '-', count: 0, [yMetric]: 0 };
+  const summaryHtml = `
+    <div class="pivot-summary">
+      <div class="pivot-summary-card">
+        <div class="label">总组数</div>
+        <div class="value">${arr.length}</div>
+      </div>
+      <div class="pivot-summary-card">
+        <div class="label">总记录数</div>
+        <div class="value">${opps.length}</div>
+      </div>
+      <div class="pivot-summary-card">
+        <div class="label">${yLabel}合计</div>
+        <div class="value">${(total).toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+      </div>
+      <div class="pivot-summary-card highlight">
+        <div class="label">最大贡献</div>
+        <div class="value">${topContrib.name}</div>
+        <div class="sub">${(topContrib[yMetric] || 0).toLocaleString(undefined, {maximumFractionDigits: 0})} (${((topContrib[yMetric] || 0) / total * 100).toFixed(1)}%)</div>
+      </div>
+    </div>
+  `;
+  // Mini bar chart for top 5
+  const top5 = arr.slice(0, 5);
+  const maxTop5 = Math.max(1, ...top5.map(i => i[yMetric] || 0));
+  const chartHtml = top5.length ? `
+    <div class="pivot-chart">
+      ${top5.map(i => `
+        <div class="pivot-chart-row">
+          <div class="pivot-chart-label">${i.name}</div>
+          <div class="pivot-chart-bar-wrap">
+            <div class="pivot-chart-bar" style="width:${((i[yMetric] || 0) / maxTop5 * 100)}%;"></div>
+          </div>
+          <div class="pivot-chart-val">${(i[yMetric] || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+  return `<div class="card">
     <h3>多维透视 (${opps.length} 条数据)</h3>
     <div class="callout info" style="margin: 8px 0 14px; padding: 10px 14px; background:#ecfeff; border-left:3px solid var(--info); border-radius:4px; font-size:12px; color:var(--text-2);">
       💡 <b>多维透视</b> — 选 X 轴维度(行),选指标(列),系统会按 X 轴分组聚合。例如:X=负责人 + 指标=总金额,看每个负责人贡献多少合同额。占比列显示该值占总和的百分比。
@@ -194,29 +307,50 @@
       <label>X 轴 <select id="pv-x">${xSelect}</select></label>
       <label>指标 <select id="pv-y">${ySelect}</select></label>
     </div>
-    <table>
-      <thead><tr><th>${PIVOT_FIELDS.find(f => f.key === xField).label}</th><th>数量</th><th>${PIVOT_METRICS.find(m => m.key === yMetric).label}</th><th>占比</th></tr></thead>
-      <tbody>${arr.map(i => `<tr>
-        <td>${i.name}</td>
-        <td class="num">${i.count}</td>
-        <td class="num">${(i[yMetric] || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
-        <td>${((i[yMetric] || 0) / total * 100).toFixed(1)}%</td>
-      </tr>`).join('')}</tbody>
+    ${summaryHtml}
+    <table class="table-pivot">
+      <thead>
+        <tr>
+          <th class="rank">#</th>
+          <th>${xLabel}</th>
+          <th class="num">数量</th>
+          <th class="num">${yLabel}</th>
+          <th class="num">占比</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${arr.map((i, idx) => `<tr${idx < 3 ? ' class="row-top"' : ''}>
+          <td class="rank">${idx + 1}</td>
+          <td>${i.name}</td>
+          <td class="num">${i.count}</td>
+          <td class="num"><b>${(i[yMetric] || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</b></td>
+          <td class="num pct">${((i[yMetric] || 0) / total * 100).toFixed(1)}%</td>
+        </tr>`).join('')}
+      </tbody>
     </table>
+    ${chartHtml ? `<h4 style="margin-top:18px;">Top 5 贡献</h4>${chartHtml}` : ''}
   </div>`;
-  }
+}
 
   function viewSt4St5(opps) {
     const st4 = opps.filter(o => o.stage && o.stage.indexOf('ST4') >= 0);
     const st5 = opps.filter(o => o.stage && o.stage.indexOf('ST5') >= 0);
-    const sum = arr => arr.reduce((s, o) => s + o.amount, 0);
+    const sumAmount = arr => arr.reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+    const sumWeighted = arr => arr.reduce((s, o) => s + (o.amountTaxIncluded || 0) * (o.winRate || 0), 0);
+    const avgAmount = arr => arr.length ? sumAmount(arr) / arr.length : 0;
+    const avgWinRate = arr => arr.length ? arr.reduce((s, o) => s + (o.winRate || 0), 0) / arr.length : 0;
+    const maxAmount = arr => arr.length ? Math.max(...arr.map(o => o.amountTaxIncluded || 0)) : 0;
     return `<div class="card">
       <h3>ST4 (赢单) vs ST5 (丢单) 对比</h3>
       <table>
-        <thead><tr><th></th><th>ST4 赢单 (${st4.length} 条)</th><th>ST5 丢单 (${st5.length} 条)</th></tr></thead>
+        <thead><tr><th></th><th><span class="tag stage-st4">ST4 赢单</span> (${st4.length} 条)</th><th><span class="tag stage-st5">ST5 丢单</span> (${st5.length} 条)</th></tr></thead>
         <tbody>
-          <tr><td>总金额</td><td>${sum(st4).toLocaleString()}</td><td>${sum(st5).toLocaleString()}</td></tr>
-          <tr><td>平均金额</td><td>${st4.length ? (sum(st4) / st4.length).toFixed(0) : 0}</td><td>${st5.length ? (sum(st5) / st5.length).toFixed(0) : 0}</td></tr>
+          <tr><td>总金额</td><td>¥${sumAmount(st4).toLocaleString(undefined, {maximumFractionDigits: 0})}</td><td>¥${sumAmount(st5).toLocaleString(undefined, {maximumFractionDigits: 0})}</td></tr>
+          <tr><td>加权金额</td><td>¥${sumWeighted(st4).toLocaleString(undefined, {maximumFractionDigits: 0})}</td><td>¥${sumWeighted(st5).toLocaleString(undefined, {maximumFractionDigits: 0})}</td></tr>
+          <tr><td>平均金额</td><td>¥${avgAmount(st4).toLocaleString(undefined, {maximumFractionDigits: 0})}</td><td>¥${avgAmount(st5).toLocaleString(undefined, {maximumFractionDigits: 0})}</td></tr>
+          <tr><td>最大单笔</td><td>¥${maxAmount(st4).toLocaleString(undefined, {maximumFractionDigits: 0})}</td><td>¥${maxAmount(st5).toLocaleString(undefined, {maximumFractionDigits: 0})}</td></tr>
+          <tr><td>平均赢率</td><td>${(avgWinRate(st4) * 100).toFixed(1)}%</td><td>${(avgWinRate(st5) * 100).toFixed(1)}%</td></tr>
+          <tr><td>赢率 1.0 的比例</td><td>${st4.length ? (st4.filter(o => o.winRate === 1).length / st4.length * 100).toFixed(1) + '%' : '0%'}</td><td>${st5.length ? (st5.filter(o => o.winRate === 0).length / st5.length * 100).toFixed(1) + '%' : '0%'}</td></tr>
         </tbody>
       </table>
     </div>`;
