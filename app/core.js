@@ -242,7 +242,68 @@
     return errs;
   }
 
-  const api = { state, reset, makeOpportunity, markModified, parseXlsx, buildXlsx, validateOpportunity };
+  // ---- Pure compute functions (no DOM, no state mutation) ----
+  // All take opportunities array, return derived data.
+  function isCountable(o) { return !o.deleted && !o.parseError; }
+
+  const DEFAULT_STAGES = [
+    'ST1 线索(Leads)', 'ST2 商机(Pipeline)', 'ST3 投标(Proposal)',
+    'ST4 赢单(Win)', 'ST5 丢单(Lose)'
+  ];
+
+  function getStageList() {
+    const stages = state.dicts.stages;
+    if (stages && stages.length) return stages;
+    return DEFAULT_STAGES;
+  }
+
+  function computeKpi(opps) {
+    const valid = opps.filter(isCountable);
+    const stages = getStageList();
+    const oppCount = valid.length;
+
+    const amountByCurrency = {};
+    const weightedByCurrency = {};
+    for (const o of valid) {
+      amountByCurrency[o.currency] = (amountByCurrency[o.currency] || 0) + o.amount;
+      weightedByCurrency[o.currency] = (weightedByCurrency[o.currency] || 0) + (o.amount * o.winRate);
+    }
+    const st4 = valid.filter(o => o.stage === stages.find(s => s.startsWith('ST4'))).length;
+    const st5 = valid.filter(o => o.stage === stages.find(s => s.startsWith('ST5'))).length;
+    const winRate = (st4 + st5) > 0 ? st4 / (st4 + st5) : 0;
+    return { oppCount, amountByCurrency, weightedByCurrency, winRate, st4, st5 };
+  }
+
+  function computeFunnel(opps) {
+    const valid = opps.filter(isCountable);
+    const stages = getStageList();
+    return stages.map(stage => {
+      const inStage = valid.filter(o => o.stage === stage);
+      const amount = inStage.reduce((s, o) => s + o.amount, 0);
+      const weighted = inStage.reduce((s, o) => s + o.amount * o.winRate, 0);
+      return { stage, count: inStage.length, amount, weighted };
+    });
+  }
+
+  function computeStageConversion(opps) {
+    const funnel = computeFunnel(opps);
+    return funnel.map((item, i) => {
+      if (i === 0) return Object.assign({}, item, { conversion: null });
+      const prev = funnel[i - 1].count;
+      return Object.assign({}, item, { conversion: prev > 0 ? item.count / prev : 0 });
+    });
+  }
+
+  function computeStageConversion(opps) {
+    const funnel = computeFunnel(opps);
+    return funnel.map((item, i) => {
+      if (i === 0) return Object.assign({}, item, { conversion: null });
+      const prev = funnel[i - 1].count;
+      return Object.assign({}, item, { conversion: prev > 0 ? item.count / prev : 0 });
+    });
+  }
+
+  const api = { state, reset, makeOpportunity, markModified, parseXlsx, buildXlsx, validateOpportunity, computeKpi, computeFunnel, computeStageConversion };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

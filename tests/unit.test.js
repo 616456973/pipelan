@@ -194,5 +194,69 @@ test('validateOpportunity rejects amount > 1e15', () => {
   assert.ok(errs.some(e => e.field === 'amount'));
 });
 
+console.log('compute*');
+
+function loadFixture() {
+  CRM.reset();
+  const buffer = fs.readFileSync(FIXTURE);
+  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
+  return CRM.state.opportunities;
+}
+
+test('computeKpi returns total/amount/weighted/winRate', () => {
+  const opps = loadFixture();
+  const k = CRM.computeKpi(opps);
+  assert.equal(typeof k.oppCount, 'number');
+  assert.equal(typeof k.amountByCurrency, 'object');
+  assert.equal(typeof k.weightedByCurrency, 'object');
+  assert.equal(typeof k.winRate, 'number');
+  assert.ok(k.oppCount > 0);
+});
+
+test('computeKpi excludes parseError and deleted', () => {
+  loadFixture();
+  CRM.state.opportunities[0].deleted = true;
+  const k = CRM.computeKpi(CRM.state.opportunities);
+  const validCount = CRM.state.opportunities.filter(o => !o.deleted && !o.parseError).length;
+  assert.equal(k.oppCount, validCount);
+});
+
+test('computeFunnel groups by stage', () => {
+  const opps = loadFixture();
+  const f = CRM.computeFunnel(opps);
+  assert.equal(f.length, 5);
+  for (const item of f) {
+    assert.ok(item.stage);
+    assert.equal(typeof item.count, 'number');
+    assert.equal(typeof item.amount, 'number');
+    assert.equal(typeof item.weighted, 'number');
+  }
+});
+
+test('computeStageConversion computes percent of previous stage', () => {
+  const opps = loadFixture();
+  const c = CRM.computeStageConversion(opps);
+  // c[0] is ST1, c[1] is ST2/prev = ST1, etc.
+  assert.equal(c.length, 5);
+  assert.equal(c[0].conversion, null, 'ST1 has no previous');
+  for (let i = 1; i < c.length; i++) {
+    assert.equal(typeof c[i].conversion, 'number');
+    assert.ok(c[i].conversion >= 0);
+  }
+});
+
+test('compute* with empty input returns zeros', () => {
+  CRM.reset();
+  const k = CRM.computeKpi([]);
+  assert.equal(k.oppCount, 0);
+  assert.equal(k.winRate, 0);
+  const f = CRM.computeFunnel([]);
+  assert.equal(f.length, 5);
+  for (const item of f) {
+    assert.equal(item.count, 0);
+    assert.equal(item.amount, 0);
+  }
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);
