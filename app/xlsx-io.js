@@ -25,11 +25,14 @@
 
   // ---- Dict key classification ----
   const DICT_CLASSIFICATION = {
-    teams:        (h, v) => /团队|team/i.test(h),
-    productLines: (h, v) => /业务线|产品线|product.?line/i.test(h) || (v.some(x => /^PL\d/.test(x))),
-    products:     (h, v) => /产品|product/i.test(h) || (v.some(x => /^P\d{3}/.test(x))),
-    stages:       (h, v) => /阶段|stage/i.test(h) || (v.some(x => /^ST\d/.test(x))),
-    currencies:   (h, v) => /币种|currenc/i.test(h) || (v.some(x => /^(USD|SGD|RMB|CNY|EUR|JPY|GBP|HKD)$/.test(x)))
+    teams:         (h, v) => /团队|team/i.test(h),
+    owners:        (h, v) => /主责销售|负责人|销售负责人|sales.?rep|owner/i.test(h),
+    customers:     (h, v) => /客户名称|客户|客户公司|customer/i.test(h),
+    productLines:  (h, v) => /业务线|产品线|product.?line/i.test(h) || (v.some(x => /^PL\d/.test(x))),
+    products:      (h, v) => /产品|product/i.test(h) || (v.some(x => /^P\d{3}/.test(x))),
+    salesChannels: (h, v) => /销售渠道|sales.?channel/i.test(h),
+    stages:        (h, v) => /阶段|stage/i.test(h) || (v.some(x => /^ST\d/.test(x))),
+    currencies:    (h, v) => /币种|currenc/i.test(h) || (v.some(x => /^(USD|SGD|RMB|CNY|EUR|JPY|GBP|HKD)$/.test(x)))
   };
 
   const DEFAULT_LOSE_REASONS = ['价格过高', '竞品优势', '客户预算', '技术不符', '决策延期', '客户取消', '其他'];
@@ -180,8 +183,8 @@
   // ---- Sheet2 smart parser (adaptive dict extraction) ----
   function parseSheet2Smart(rows) {
     const dicts = {
-      teams: [], productLines: [], products: [],
-      stages: [], currencies: [], loseReasons: DEFAULT_LOSE_REASONS.slice()
+      teams: [], owners: [], customers: [], productLines: [], products: [],
+      salesChannels: [], stages: [], currencies: [], loseReasons: DEFAULT_LOSE_REASONS.slice()
     };
 
     if (!rows.length) return dicts;
@@ -293,7 +296,7 @@
   }
 
   function inferDictsFromSheet1(rows, headerRowIdx, colMap) {
-    const dicts = { teams: [], productLines: [], products: [], stages: [], currencies: [] };
+    const dicts = { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [] };
     // Collect data rows
     const dataRows = [];
     for (let r = headerRowIdx + 1; r < rows.length; r++) {
@@ -322,13 +325,15 @@
 
   // Last-resort: scan all rows for value patterns matching dict signatures.
   function inferDictsFromValues(rows) {
-    const dicts = { teams: [], productLines: [], products: [], stages: [], currencies: [] };
+    const dicts = { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [] };
     // Pattern checks
     const teamRe = /^(基础业务|AIPULSE|[A-Za-z一-鿿]{2,}(团队|部|Team))$/;
     const plRe = /^PL\d/;
     const productRe = /^P\d{3}/;
     const stageRe = /^ST\d/;
     const currencyRe = /^(USD|SGD|RMB|CNY|EUR|JPY|GBP|HKD)$/;
+    const ownerRe = /^(张\w+|李\w+|王\w+|刘\w+|陈\w+|杨\w+|赵\w+|黄\w+|周\w+|吴\w+|徐\w+|孙\w+|胡\w+|朱\w+|高\w+|林\w+|何\w+|郭\w+|马\w+|罗\w+|梁\w+|宋\w+|郑\w+|谢\w+|韩\w+|唐\w+|冯\w+|于\w+|董\w+|萧\w+|Kara)$/;
+    const channelRe = /^(字节跳动|翼华科技|直签|渠道|代理)$/;
     for (const row of rows) {
       for (const cell of (row || [])) {
         const v = String(cell || '').trim();
@@ -338,6 +343,8 @@
         else if (productRe.test(v)) dicts.products = mergeUnique(dicts.products, [v]);
         else if (stageRe.test(v)) dicts.stages = mergeUnique(dicts.stages, [v]);
         else if (currencyRe.test(v)) dicts.currencies = mergeUnique(dicts.currencies, [v]);
+        else if (ownerRe.test(v)) dicts.owners = mergeUnique(dicts.owners, [v]);
+        else if (channelRe.test(v)) dicts.salesChannels = mergeUnique(dicts.salesChannels, [v]);
       }
     }
     return dicts;

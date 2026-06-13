@@ -4,14 +4,19 @@
 
   const DICT_FIELDS = [
     { key: 'teams', label: '销售团队' },
+    { key: 'owners', label: '主责销售' },
+    { key: 'customers', label: '客户名称' },
     { key: 'productLines', label: '业务线' },
     { key: 'products', label: '业务/产品' },
+    { key: 'salesChannels', label: '销售渠道' },
     { key: 'stages', label: '阶段' },
     { key: 'currencies', label: '币种' },
     { key: 'loseReasons', label: '丢单原因' }
   ];
   const FIELD_TO_OPP = {
-    teams: 'team', productLines: 'productLine', products: 'product',
+    teams: 'team', owners: 'owner', customers: 'customer',
+    productLines: 'productLine', products: 'product',
+    salesChannels: 'salesChannel',
     stages: 'stage', currencies: 'currency'
     // loseReasons maps to opp.loseReason (comma-separated)
   };

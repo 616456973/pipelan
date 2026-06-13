@@ -51,14 +51,21 @@
   <script src="app/ui-field-help.js"></script>
   <script>
     // Tab navigation
+    const TAB_RENDERERS = {
+      dashboard: 'renderDashboard',
+      list: 'renderList',
+      form: 'renderForm',
+      analysis: 'renderAnalysis',
+      dicts: 'renderDicts',
+      fieldhelp: 'renderFieldHelp'
+    };
     document.querySelectorAll('.tab').forEach(btn => {
       btn.onclick = () => {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         btn.classList.add('active');
         const tab = btn.dataset.tab;
-        if (typeof window['render' + tab[0].toUpperCase() + tab.slice(1)] === 'function') {
-          window['render' + tab[0].toUpperCase() + tab.slice(1)]();
-        }
+        const fn = window[TAB_RENDERERS[tab]];
+        if (typeof fn === 'function') fn();
       };
     });
     // Topbar import/export/backup/restore flow (Task D)

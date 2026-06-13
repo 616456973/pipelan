@@ -45,17 +45,27 @@ html, body {
 .topbar h1 { font-size: 19px; font-weight: 600; margin-right: 12px; letter-spacing: 0.3px; }
 .tab {
   background: transparent;
-  border: 0;
-  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  color: var(--text-2);
   padding: 8px 16px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 14px;
   font-family: inherit;
   transition: all 0.15s;
+  font-weight: 500;
 }
-.tab:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
-.tab.active { background: rgba(255, 255, 255, 0.2); color: #fff; font-weight: 600; }
+.tab:hover { background: var(--surface-2); border-color: #cbd5e0; color: var(--text); }
+.tab.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+
+/* Topbar tabs override (dark gradient background) */
+.topbar .tab {
+  background: transparent;
+  border: 0;
+  color: rgba(255, 255, 255, 0.85);
+}
+.topbar .tab:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.topbar .tab.active { background: rgba(255, 255, 255, 0.2); color: #fff; }
 .topbar .spacer { flex: 1; }
 .topbar .db-status {
   font-size: 12px;
