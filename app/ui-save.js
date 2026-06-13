@@ -24,14 +24,85 @@
     document.getElementById('import-input').click();
   }
 
+  // Validation rules — return array of human-readable issues.
+  // Runs against the dry-run parsed data BEFORE writing to the DB.
+  function validateImportData(parsed) {
+    const issues = [];
+    if (!parsed || !parsed.opportunities || !parsed.opportunities.length) {
+      issues.push('文件中没有商机数据(0 条记录)');
+      return issues;
+    }
+    let missingOppName = 0, missingTeam = 0, missingOwner = 0, missingCustomer = 0;
+    let invalidWinRate = 0, invalidAmount = 0, invalidDate = 0;
+    const invalidStages = new Set();
+    for (const o of parsed.opportunities) {
+      if (o.parseError) continue;
+      if (!o.oppName) missingOppName++;
+      if (!o.team) missingTeam++;
+      if (!o.owner) missingOwner++;
+      if (!o.customer) missingCustomer++;
+      if (typeof o.winRate !== 'number' || o.winRate < 0 || o.winRate > 1) invalidWinRate++;
+      if (o.amount == null || isNaN(o.amount) || o.amount < 0) invalidAmount++;
+      if (o.expectedDate != null && isNaN(Number(o.expectedDate))) invalidDate++;
+      if (o.stage && !/^ST[1-5]/.test(String(o.stage).toUpperCase())) invalidStages.add(o.stage);
+    }
+    if (missingOppName) issues.push(`${missingOppName} 条商机缺少「商机名称」`);
+    if (missingTeam) issues.push(`${missingTeam} 条商机缺少「销售团队」`);
+    if (missingOwner) issues.push(`${missingOwner} 条商机缺少「负责人」`);
+    if (missingCustomer) issues.push(`${missingCustomer} 条商机缺少「客户名称」`);
+    if (invalidWinRate) issues.push(`${invalidWinRate} 条商机「赢单概率」值无效(应为 0-1 之间的数字)`);
+    if (invalidAmount) issues.push(`${invalidAmount} 条商机「含税金额」值无效`);
+    if (invalidDate) issues.push(`${invalidDate} 条商机「预计落单时间」值无效`);
+    if (invalidStages.size) {
+      issues.push(`${invalidStages.size} 个非标准阶段值: ${[...invalidStages].slice(0, 3).join(', ')}`);
+    }
+    return issues;
+  }
+
   async function onImportFile(e) {
     const file = e.target.files[0];
     if (!file) return;
     try {
+      // Step 1: Dry-run parse (no DB writes) for pre-import validation.
+      const XLSX_IO = window.CRM_XLSX || (window.RASH && window.RASH.parseXlsxSmart);
+      if (!XLSX_IO) {
+        Notify.error('xlsx 解析器未加载');
+        e.target.value = '';
+        return;
+      }
+      const buffer = new Uint8Array(await file.arrayBuffer());
+      let parsed;
+      try {
+        parsed = XLSX_IO.parseXlsxSmart(buffer);
+      } catch (parseErr) {
+        Notify.error('文件解析失败: ' + parseErr.message);
+        e.target.value = '';
+        return;
+      }
+
+      // Step 2: Validate and confirm if any issues found.
+      const issues = validateImportData(parsed);
+      if (issues.length > 0) {
+        const summary = issues.slice(0, 8).map(s => '• ' + s).join('\n');
+        const more = issues.length > 8 ? `\n... 还有 ${issues.length - 8} 条问题` : '';
+        const msg = `发现 ${issues.length} 个问题:\n${summary}${more}\n\n是否仍要导入?`;
+        if (!confirm(msg)) {
+          Notify.info('已取消导入');
+          e.target.value = '';
+          return;
+        }
+        Notify.warn('继续导入, 跳过错误检查');
+      }
+
+      // Step 3: Actually import (CRM.importXlsxFile re-parses & persists).
       Notify.info('正在导入 ' + file.name + ' ...');
       const result = await CRM.importXlsxFile(file);
       const errs = (result && result.parseErrors) ? result.parseErrors : 0;
       Notify.info('已导入 ' + result.imported + ' 条商机' + (errs ? ', ' + errs + ' 条解析异常' : ''));
+      // Mark all imported opps as recently changed (so they highlight in the list).
+      if (result && result.importedIds && CRM.markOppsAsChanged) {
+        CRM.markOppsAsChanged(result.importedIds);
+      }
       // Refresh current view
       const activeTab = document.querySelector('.tab.active');
       if (activeTab) activeTab.click();

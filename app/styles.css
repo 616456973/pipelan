@@ -478,3 +478,27 @@ tr.row-editing td {
   box-shadow: var(--shadow-md);
   cursor: pointer;
 }
+
+/* === Sortable column headers (ui-list) === */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  background: var(--surface-2) !important;
+  color: var(--primary) !important;
+}
+.sort-ind {
+  font-size: 9px;
+  margin-left: 2px;
+  opacity: 0.5;
+}
+
+/* === Recently changed row (after xlsx import) === */
+tr.row-changed {
+  background: #ecfdf5 !important;
+  box-shadow: inset 3px 0 0 #10b981;
+}
+tr.row-changed td {
+  background: transparent;
+}

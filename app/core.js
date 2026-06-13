@@ -20,8 +20,20 @@
     dicts: { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [], loseReasons: [] },
     fileName: '',
     fileLoaded: false,
-    dbEmpty: true
+    dbEmpty: true,
+    recentlyChanged: new Set()  // opp IDs that were just imported/changed (highlighted briefly)
   };
+
+  // Mark a set of opp IDs as "recently changed" (highlighted in the list for 30s).
+  // No-op in Node; safe to call from any code path.
+  function markOppsAsChanged(ids) {
+    if (!ids || !ids.length) return;
+    for (const id of ids) state.recentlyChanged.add(id);
+    // Auto-clear after 30 seconds
+    setTimeout(() => {
+      for (const id of ids) state.recentlyChanged.delete(id);
+    }, 30000);
+  }
 
   // ---- v3.0 Built-in Enums (NOT in DB, hardcoded) ----
   const BUILTIN_INVOICE_STATUSES = ['未开发票', '已开票', '合同中', '已回款', '已预付'];
@@ -275,7 +287,13 @@
     state.fileName = file.name;
     state.fileLoaded = true;
     await refreshState();
-    return result;  // { imported: N, parseErrors: M, errors: [...] }
+    // Collect all currently-loaded opp IDs (everything that was just imported).
+    // We use the refreshed state.opportunities, which is the source of truth after
+    // refreshState() finishes.
+    const importedIds = (state.opportunities || [])
+      .filter(o => !o.deleted && !o.parseError)
+      .map(o => o.id);
+    return Object.assign({}, result, { importedIds });
   }
 
   function exportXlsxBlob() {
@@ -398,7 +416,8 @@
     downloadBackup, restoreFromBackup,
     upsertOpp,
     addDictValue, updateDictValue, deleteDictValue, markModified,
-    syncDictsFromOpps
+    syncDictsFromOpps,
+    markOppsAsChanged
   };
 
   if (typeof module !== 'undefined' && module.exports) {

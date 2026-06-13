@@ -6,8 +6,13 @@
   const filterState = {
     customers: [], owners: [], stages: [], currencies: [],
     search: '',
-    showDeleted: false
+    showDeleted: false,
+    dateFrom: '',
+    dateTo: ''
   };
+
+  // Module-level sort state. Default: position ascending (xlsx import order).
+  const sortState = { field: 'position', dir: 'asc' };
 
   // Row-level edit state. null = no row in edit mode; otherwise the opp.id being edited.
   let editingId = null;
@@ -67,6 +72,8 @@
         <label>负责人 <select multiple size="1" id="f-owner">${owners.map(t => `<option value="${t}" ${filterState.owners.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>阶段 <select multiple size="1" id="f-stage">${stages.map(t => `<option value="${t}" ${filterState.stages.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>币种 <select multiple size="1" id="f-currency">${currs.map(t => `<option value="${t}" ${filterState.currencies.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>预计落单从 <input type="date" id="f-date-from" value="${filterState.dateFrom}"></label>
+        <label>到 <input type="date" id="f-date-to" value="${filterState.dateTo}"></label>
         <label>搜索 <input id="f-search" value="${filterState.search}" placeholder="商机/客户"></label>
         <label><input type="checkbox" id="f-del" ${filterState.showDeleted ? 'checked' : ''}> 显示已删除</label>
         <button class="btn" id="f-clear">清空</button>
@@ -82,6 +89,14 @@
       if (filterState.owners.length && !filterState.owners.includes(o.owner)) return false;
       if (filterState.stages.length && !filterState.stages.includes(o.stage)) return false;
       if (filterState.currencies.length && !filterState.currencies.includes(o.currency)) return false;
+      // Date range filter (预计落单时间)
+      if (filterState.dateFrom || filterState.dateTo) {
+        if (!o.expectedDate) return false;
+        const od = serialToDateStr(o.expectedDate);  // YYYY-MM-DD or ''
+        if (!od) return false;
+        if (filterState.dateFrom && od < filterState.dateFrom) return false;
+        if (filterState.dateTo && od > filterState.dateTo) return false;
+      }
       if (filterState.search) {
         const s = filterState.search.toLowerCase();
         if (!(o.oppName || '').toLowerCase().includes(s) && !(o.customer || '').toLowerCase().includes(s)) return false;
@@ -90,14 +105,35 @@
     });
   }
 
-  function rowHtml(o, idx) {
-    const cls = o.parseError ? 'row-error' : (o.deleted ? 'row-deleted' : (editingId === o.id ? 'row-editing' : ''));
+  // Sort opps by sortState.field/dir. Stable, null-safe, numeric-aware.
+  function sortOpps(opps) {
+    const f = sortState.field;
+    const dir = sortState.dir === 'desc' ? -1 : 1;
+    return opps.slice().sort((a, b) => {
+      let va = a[f], vb = b[f];
+      // nulls last regardless of direction
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      // Numeric comparison
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      // String comparison (case-insensitive)
+      va = String(va).toLowerCase();
+      vb = String(vb).toLowerCase();
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }
+
+  function rowHtml(o) {
+    const changed = CRM.state.recentlyChanged && CRM.state.recentlyChanged.has(o.id);
+    const cls = o.parseError ? 'row-error' : (o.deleted ? 'row-deleted' : (editingId === o.id ? 'row-editing' : (changed ? 'row-changed' : '')));
     const errTitle = o.parseError ? `title="行 ${o.parseError.row}: ${o.parseError.message}"` : '';
     const safeId = o.id.replace(/'/g, "\\'");
     const isEditing = editingId === o.id;
     return `
       <tr class="${cls}" ${errTitle}>
-        <td>${idx + 1}</td>
         <td>${o.team || ''}</td>
         <td>${isEditing
           ? `<select id="ed-owner-${safeId}" class="cell-edit"><option value="">—</option>${(CRM.state.dicts.owners || []).map(v => `<option value="${v}" ${v === o.owner ? 'selected' : ''}>${v}</option>`).join('')}</select>`
@@ -132,6 +168,10 @@
         renderList();
       };
     }
+    const dateFromEl = document.getElementById('f-date-from');
+    if (dateFromEl) dateFromEl.onchange = (e) => { filterState.dateFrom = e.target.value; renderList(); };
+    const dateToEl = document.getElementById('f-date-to');
+    if (dateToEl) dateToEl.onchange = (e) => { filterState.dateTo = e.target.value; renderList(); };
     document.getElementById('f-search').oninput = (e) => {
       filterState.search = e.target.value;
       renderList();
@@ -152,7 +192,7 @@
 
   function renderList() {
     const content = document.getElementById('content');
-    const filtered = applyFilters(CRM.state.opportunities);
+    const filtered = sortOpps(applyFilters(CRM.state.opportunities));
     // Compute totals
     const totals = { count: filtered.length, byCurrency: {} };
     for (const o of filtered) {
@@ -169,7 +209,6 @@
       <div class="card">
         <table>
           <colgroup>
-            <col style="width:40px">       <!-- # -->
             <col style="width:80px">       <!-- 团队 -->
             <col style="width:80px">       <!-- 负责人 -->
             <col>                          <!-- 商机 (auto-expand) -->
@@ -181,18 +220,26 @@
             <col style="width:100px">      <!-- 含税金额 -->
             <col style="width:56px">       <!-- 赢率 -->
             <col style="width:92px">       <!-- 预计落单 -->
-            <col style="width:100px">      <!-- 操作 (2 buttons) -->
+            <col style="width:100px">      <!-- 操作 -->
           </colgroup>
           <thead><tr>
-            <th>#</th><th>团队</th><th>负责人</th><th>商机</th><th>客户</th>
-            <th>业务线</th><th>产品</th><th>阶段</th><th>发票状态</th>
-            <th class="num">含税金额</th>
-            <th>赢率</th><th>预计落单</th><th>操作</th>
+            <th class="sortable" data-sort-field="team">团队 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="owner">负责人 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="oppName">商机 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="customer">客户 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="productLine">业务线 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="product">产品 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="stage">阶段 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="invoiceStatus">发票状态 <span class="sort-ind"></span></th>
+            <th class="sortable num" data-sort-field="amountTaxIncluded">含税金额 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="winRate">赢率 <span class="sort-ind"></span></th>
+            <th class="sortable" data-sort-field="expectedDate">预计落单 <span class="sort-ind"></span></th>
+            <th>操作</th>
           </tr></thead>
-          <tbody>${filtered.map((o, i) => rowHtml(o, i)).join('')}</tbody>
+          <tbody>${filtered.map((o) => rowHtml(o)).join('')}</tbody>
           <tfoot>
             <tr>
-              <td colspan="10" style="text-align:right;"><b>合计</b> (共 ${totals.count} 条)</td>
+              <td colspan="9" style="text-align:right;"><b>合计</b> (共 ${totals.count} 条)</td>
               <td class="num" title="按币种明细: ${Object.entries(totals.byCurrency).map(([c,v])=>c+' '+Math.round(v).toLocaleString()).join(' / ')}">
                 <b>${currencyHtml}</b>
               </td>
@@ -203,6 +250,23 @@
       </div>
     `;
     attachFilterHandlers();
+    // Wire up sortable headers + show indicator on the active sort column
+    content.querySelectorAll('th.sortable').forEach(th => {
+      th.onclick = () => {
+        const f = th.dataset.sortField;
+        if (sortState.field === f) {
+          sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortState.field = f;
+          sortState.dir = 'asc';
+        }
+        renderList();
+      };
+      if (sortState.field === th.dataset.sortField) {
+        const ind = th.querySelector('.sort-ind');
+        if (ind) ind.textContent = sortState.dir === 'asc' ? '▲' : '▼';
+      }
+    });
   }
 
   function deleteOpp(id) {

@@ -9,78 +9,64 @@
     const content = document.getElementById('content');
     const invoiceChips = BUILTIN_INVOICE_STATUSES
       .map(s => `<span class="chip">${s}</span>`).join(' ');
-    const rateRows = Object.entries(EXCHANGE_RATES_TO_RMB)
-      .map(([cur, rate]) => `<tr><td><code>${cur}</code></td><td>${rate}</td></tr>`).join('');
 
     content.innerHTML = `
-      <h2>字段说明 — 字典 ↔ 商机 映射</h2>
+      <h2>字段说明 — 怎么填商机</h2>
 
-      <div class="grid-2" style="display:grid; grid-template-columns: 1fr 1.4fr; gap:18px;">
+      <div class="callout info" style="margin-bottom:18px;">
+        <div class="title">💡 5 分钟快速上手</div>
+        <p>在「新增商机」页填一条记录,系统会自动算出加权金额;在「商机列表」查看所有商机,可以筛选、按列排序、点行直接编辑。字典里可以加新的客户、负责人、销售渠道等,以后填商机时下拉里就有。</p>
+      </div>
+
+      <div class="grid-2" style="display:grid; grid-template-columns: 1fr 1.2fr; gap:18px;">
         <div class="card">
-          <h3>字段分类</h3>
-          <p><b>下拉单选字段 (9)</b></p>
-          <p class="muted" style="line-height:2;">销售团队 / 主责销售 / 客户名称 / 业务线 / 业务·产品 / 销售渠道 / 阶段 / 币种 / 丢单原因</p>
-          <hr style="margin:14px 0; border:0; border-top:1px solid var(--border);">
-          <p><b>内置枚举 (1)</b></p>
-          <p class="muted" style="line-height:2;">发票状态(5 个固定值,代码里改)</p>
-          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">${invoiceChips}</div>
-          <hr style="margin:14px 0; border:0; border-top:1px solid var(--border);">
-          <p><b>自由值字段 (5)</b></p>
-          <p class="muted" style="line-height:2;">含税金额 / 折算 RMB / 赢率 / 预计落单时间 / (内部)备注</p>
-          <hr style="margin:14px 0; border:0; border-top:1px solid var(--border);">
-          <p><b>汇率 (3 个币种,代码里改)</b></p>
-          <table style="max-width:280px; margin-top:6px;">
-            <thead><tr><th>币种</th><th>汇率 → RMB</th></tr></thead>
-            <tbody>${rateRows}</tbody>
-          </table>
+          <h3>📋 填商机时,每个字段是什么意思?</h3>
+          <p><b>商机名称</b><br>这个商机的简短名字,比如"XX 公司 ERP 项目"。建议写得具体一点,方便后面查找。</p>
+          <p><b>客户名称</b><br>客户的真实公司全称。下拉里选已有的;没有就输入新名字,系统会自动加到客户字典里。</p>
+          <p><b>负责人(主责销售)</b><br>这个商机由谁在跟。例:"张晶晶"。</p>
+          <p><b>销售团队</b><br>负责人所在团队。例:"渠道业务部"。</p>
+          <p><b>业务线 / 业务·产品</b><br>这个商机属于哪个产品线。例:业务线选"PL1 企业云方案",产品选"P120 企业数字化解决方案"。</p>
+          <p><b>销售渠道</b><br>这个商机通过什么渠道来的。例:"字节跳动"(合作伙伴)、"直签"(直接找客户)、"翼华科技"。</p>
+          <p><b>阶段</b><br>当前跟单到哪一步:
+            <span class="tag stage-st1">ST1 线索</span>
+            <span class="tag stage-st2">ST2 商机</span>
+            <span class="tag stage-st3">ST3 投标</span>
+            <span class="tag stage-st4">ST4 赢单</span>
+            <span class="tag stage-st5">ST5 丢单</span>
+          </p>
+          <p><b>发票状态</b><br>钱到哪一步了:${invoiceChips}</p>
+          <p><b>币种 / 含税金额</b><br>合同金额和币种。系统自动算"折算 RMB"显示在仪表盘上。</p>
+          <p><b>赢单概率</b><br>你判断能拿下的把握。0-1 之间的数字,例 0.7 = 70%。<b>选阶段时系统会自动建议一个默认值</b>(ST1=10%, ST2=30%, ST3=50%, ST4=100%),你可以再调。</p>
+          <p><b>预计落单时间</b><br>预计什么时候签合同/丢单。用日期选择器选。</p>
+          <p><b>丢单原因</b>(仅 ST5)<br>如果最后没拿下,勾选原因。例:"价格过高"、"竞品优势"。多选。</p>
+          <p><b>备注</b><br>内部备注,不在导出 Excel 里(发票状态那列才是导出时给客户看的)。</p>
         </div>
 
         <div>
           <div class="card">
-            <h3>📌 Q1: 字典里能加新值吗?</h3>
-            <p>可以。点击顶栏 <b>「字典」</b> tab,选要改的字典(销售团队/主责销售/客户名称/业务线/业务·产品/销售渠道/阶段/币种/丢单原因),点 <b>+ 新增</b>。</p>
+            <h3>❓ 字典是什么?能加新值吗?</h3>
+            <p><b>字典</b>就是下拉里那些选项的来源(团队、负责人、客户、产品…)。</p>
+            <p><b>能加新值吗?</b>能。在「字典」页选要改的字典 → 点「+ 新增」→ 输入名字 → 确认。下次填商机时下拉里就有。</p>
+            <p><b>能改名字吗?</b>能。点某行的「编辑」改完,所有引用这个值的商机会自动同步更新。</p>
+            <p><b>能删除吗?</b>能,但被引用的删之前会提示"X 条商机引用了 Y,删除后这些商机字段会变成'未分类'"。确认后才会改。</p>
+            <p><b>哪些不能改?</b>发票状态 5 个值(代码里固定的)、汇率(代码里)。要改这两个要找开发。</p>
           </div>
+
           <div class="card">
-            <h3>📝 Q2: 字典值能改名吗?</h3>
-            <p>可以。点字典里某行的 <b>编辑</b> 按钮。改完后,所有引用这个值的商机字段会<b>自动更新</b>(数据库是事务级更新的)。</p>
+            <h3>📊 仪表盘怎么看?</h3>
+            <p><b>商机总数 / 赢单数 / 活跃客户</b> — 一目了然,顶部 4 个大数字就是。</p>
+            <p><b>总合同金额 / 加权金额</b> — 总金额是所有商机的合同金额,加权金额是"金额 × 赢单概率"的合计(预计能拿到的钱)。</p>
+            <p><b>阶段漏斗</b> — 看每个阶段有多少商机,越往下越少说明转化健康。</p>
+            <p><b>月度加权趋势</b> — 按月看未来 N 个月预计能到手的金额走势。</p>
+            <p><b>业务线金额占比 / TOP 10 销售代表</b> — 看哪个产品/谁贡献最大。</p>
           </div>
+
           <div class="card">
-            <h3>🗑️ Q3: 字典值能删吗?</h3>
-            <p>可以,但被引用的删之前会弹引用计数对话框。<br>
-            例如:删字典 <b>「李经理」</b>,如果有 5 条商机负责人 = 「李经理」,会提示「5 条商机引用了 李经理,删除后这些商机的字段会变成'未分类'」。<br>
-            确认后才会改。</p>
-          </div>
-          <div class="card">
-            <h3>🔒 Q4: 哪些字段不能改?</h3>
-            <p><b>发票状态</b>(5 个固定值)和 <b>汇率</b>(3 个币种)是写死在代码里的内置枚举,不在字典管理 UI 里,不能编辑。<br>
-            需要改这两个,要改 <code>app/core.js</code> 里的 <code>BUILTIN_INVOICE_STATUSES</code> 和 <code>EXCHANGE_RATES_TO_RMB</code> 常量。</p>
+            <h3>📈 分析页能干啥?</h3>
+            <p>分析页有 12 个视图,涵盖阶段漏斗、趋势、TOP 排名、帕累托 80/20、转化率、丢单原因汇总、透视表、销售代表业绩、逾期预警、客户集中度、发票状态分布、ST4 vs ST5 对比。</p>
+            <p>视图之间是同一份数据(响应你设置的筛选条件)。</p>
           </div>
         </div>
-      </div>
-
-      <div class="card" style="margin-top:18px;">
-        <h3>技术参考 — 商机字段 × 字典表 完整映射</h3>
-        <table>
-          <thead><tr><th>商机字段</th><th>类型</th><th>字典</th><th>说明</th></tr></thead>
-          <tbody>
-            <tr><td><code>oppName</code></td><td>文本</td><td>(无)</td><td>商机名称</td></tr>
-            <tr><td><code>team</code></td><td>下拉</td><td><code>dict_teams</code></td><td>销售团队</td></tr>
-            <tr><td><code>owner</code></td><td>下拉</td><td><code>dict_owners</code></td><td>主责销售</td></tr>
-            <tr><td><code>customer</code></td><td>下拉(可手动新增)</td><td><code>dict_customers</code></td><td>客户名称</td></tr>
-            <tr><td><code>productLine</code></td><td>下拉</td><td><code>dict_product_lines</code></td><td>业务线</td></tr>
-            <tr><td><code>product</code></td><td>下拉</td><td><code>dict_products</code></td><td>业务/产品</td></tr>
-            <tr><td><code>salesChannel</code></td><td>下拉</td><td><code>dict_sales_channels</code></td><td>销售渠道</td></tr>
-            <tr><td><code>stage</code></td><td>下拉</td><td><code>dict_stages</code></td><td>阶段 (5 个固定值)</td></tr>
-            <tr><td><code>invoiceStatus</code></td><td>下拉</td><td>(内置枚举)</td><td>发票状态 (5 个固定值,代码里改)</td></tr>
-            <tr><td><code>currency</code></td><td>下拉</td><td><code>dict_currencies</code></td><td>币种</td></tr>
-            <tr><td><code>amountTaxIncluded</code></td><td>数字</td><td>(无)</td><td>含税金额</td></tr>
-            <tr><td><code>amountRmbEquivalent</code></td><td>数字(自动算)</td><td>(无)</td><td>折算 RMB = 含税金额 × 汇率</td></tr>
-            <tr><td><code>winRate</code></td><td>数字 (0-1)</td><td>(无)</td><td>赢单概率</td></tr>
-            <tr><td><code>expectedDate</code></td><td>Excel 序列号</td><td>(无)</td><td>预计落单时间</td></tr>
-            <tr><td><code>note</code></td><td>自由文本</td><td>(无)</td><td>内部备注</td></tr>
-            <tr><td><code>loseReason</code></td><td>逗号分隔多值</td><td><code>dict_lose_reasons</code></td><td>丢单原因 (例: "价格过高,竞品优势")</td></tr>
-          </tbody>
-        </table>
       </div>
     `;
   }
