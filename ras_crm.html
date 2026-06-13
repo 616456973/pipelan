@@ -23,7 +23,17 @@
     <button class="btn btn-primary" id="save-btn">保存</button>
   </div>
   <div class="container" id="content">
-    <div class="card"><p class="muted">请打开一个 xlsx 文件开始。</p></div>
+    <div class="card">
+      <h2>开始使用</h2>
+      <p>本应用以 xlsx 文件作为数据库, 浏览器不会保存任何数据到本地。</p>
+      <ol style="line-height: 1.9;">
+        <li>点击右上角 <b>"打开"</b> 选择一个 xlsx 文件 (例如 <code>RAS CRM（template） (version0529).xlsx</code>)</li>
+        <li>在 <b>"商机"</b> 标签查看/编辑数据, <b>"仪表盘"</b> 看 KPI, <b>"字典"</b> 管理下拉选项</li>
+        <li>点 <b>"保存"</b> 后, 浏览器会 <b>下载一个带时间戳的 xlsx</b> 到你的 <code>Downloads</code> 文件夹, 文件名形如 <code>ras_crm_20260613_141530.xlsx</code></li>
+        <li>你需要 <b>手动把下载的文件</b> 移回 / 覆盖原文件 (浏览器无法直接写本地任意路径)</li>
+      </ol>
+      <p class="muted">首次保存会弹"样式丢失"提醒, 这是 SheetJS 库的限制 (数据完整, 仅丢失原 Excel 格式). 点"确定"后不再提醒.</p>
+    </div>
   </div>
   <input type="file" id="file-input" accept=".xlsx" style="display:none">
   <script src="app/core.js"></script>
