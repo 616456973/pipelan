@@ -144,5 +144,55 @@ test('buildXlsx preserves dict values', () => {
   assert.deepEqual(CRM.state.dicts.teams, teamsBefore);
 });
 
+console.log('validators');
+
+test('validateOpportunity passes for complete record', () => {
+  const opp = CRM.makeOpportunity({
+    team: '基础业务', owner: '张经理', oppName: '商机1', customer: '客户1',
+    productLine: 'PL1 企业云方案(Hyper Cloud)', product: 'P110 企业云基础产品',
+    currency: 'RMB', stage: 'ST1 线索(Leads)', winRate: 0.5, amount: 1000, amountNet: 885
+  });
+  const errors = CRM.validateOpportunity(opp);
+  assert.equal(errors.length, 0);
+});
+
+test('validateOpportunity catches all required missing', () => {
+  const opp = CRM.makeOpportunity();
+  const errors = CRM.validateOpportunity(opp);
+  // makeOpportunity() defaults stage='ST1 线索(Leads)' (not empty),
+  // so 7 of 8 required fields are missing: team, owner, oppName, customer, productLine, product, currency
+  assert.ok(errors.length >= 7, 'expected many required-field errors, got ' + errors.length);
+});
+
+test('validateOpportunity rejects amount negative', () => {
+  const opp = CRM.makeOpportunity({
+    team: 'A', owner: 'B', oppName: 'a', customer: 'b',
+    productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST1', winRate: 0,
+    amount: -1, amountNet: 0
+  });
+  const errs = CRM.validateOpportunity(opp);
+  assert.ok(errs.some(e => e.field === 'amount'));
+});
+
+test('validateOpportunity rejects winRate out of range', () => {
+  const opp = CRM.makeOpportunity({
+    team: 'A', owner: 'B', oppName: 'a', customer: 'b',
+    productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST1',
+    winRate: 1.5, amount: 0, amountNet: 0
+  });
+  const errs = CRM.validateOpportunity(opp);
+  assert.ok(errs.some(e => e.field === 'winRate'));
+});
+
+test('validateOpportunity rejects amount > 1e15', () => {
+  const opp = CRM.makeOpportunity({
+    team: 'A', owner: 'B', oppName: 'a', customer: 'b',
+    productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST1',
+    winRate: 0, amount: 1e16, amountNet: 0
+  });
+  const errs = CRM.validateOpportunity(opp);
+  assert.ok(errs.some(e => e.field === 'amount'));
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);

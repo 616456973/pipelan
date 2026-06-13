@@ -216,7 +216,33 @@
     return new Uint8Array(out);
   }
 
-  const api = { state, reset, makeOpportunity, markModified, parseXlsx, buildXlsx };
+  function validateOpportunity(opp) {
+    const errs = [];
+    if (!opp.team) errs.push({ field: 'team', message: '销售团队必填' });
+    if (!opp.owner) errs.push({ field: 'owner', message: '负责人必填' });
+    else if (opp.owner.length > 100) errs.push({ field: 'owner', message: '负责人 ≤100 字符' });
+    if (!opp.oppName) errs.push({ field: 'oppName', message: '商机名称必填' });
+    else if (opp.oppName.length > 200) errs.push({ field: 'oppName', message: '商机名称 ≤200 字符' });
+    if (!opp.customer) errs.push({ field: 'customer', message: '客户名称必填' });
+    else if (opp.customer.length > 200) errs.push({ field: 'customer', message: '客户名称 ≤200 字符' });
+    if (!opp.productLine) errs.push({ field: 'productLine', message: '业务线必填' });
+    if (!opp.product) errs.push({ field: 'product', message: '业务/产品必填' });
+    if (!opp.currency) errs.push({ field: 'currency', message: '币种必填' });
+    if (!opp.stage) errs.push({ field: 'stage', message: '阶段必填' });
+    if (typeof opp.winRate !== 'number' || isNaN(opp.winRate) || opp.winRate < 0 || opp.winRate > 1) {
+      errs.push({ field: 'winRate', message: '赢率 0~1' });
+    }
+    if (typeof opp.amount !== 'number' || isNaN(opp.amount) || opp.amount < 0 || opp.amount > 1e15) {
+      errs.push({ field: 'amount', message: '含税金额 0~1e15' });
+    }
+    if (typeof opp.amountNet !== 'number' || isNaN(opp.amountNet) || opp.amountNet < 0 || opp.amountNet > 1e15) {
+      errs.push({ field: 'amountNet', message: '不含税金额 0~1e15' });
+    }
+    if (opp.note && opp.note.length > 500) errs.push({ field: 'note', message: '备注 ≤500 字符' });
+    return errs;
+  }
+
+  const api = { state, reset, makeOpportunity, markModified, parseXlsx, buildXlsx, validateOpportunity };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
