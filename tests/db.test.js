@@ -17,10 +17,11 @@ function test(name, fn) {
   console.log('db');
   const CRM_DB = require('../app/db.js');
 
-  await test('initDb (in-memory) creates 8 tables', async () => {
+  await test('initDb (in-memory) creates 11 tables', async () => {
     await CRM_DB.initDb({ forceInMemory: true });
     const tables = CRM_DB.listTables();
-    assert.equal(tables.length, 8);
+    // v3.0: 6 dict tables (v1) + 3 new dict tables + oportunidades + meta = 11
+    assert.equal(tables.length, 11);
     assert.ok(tables.includes('oportunidades'));
     assert.ok(tables.includes('dict_teams'));
     assert.ok(tables.includes('dict_product_lines'));
@@ -28,6 +29,9 @@ function test(name, fn) {
     assert.ok(tables.includes('dict_stages'));
     assert.ok(tables.includes('dict_currencies'));
     assert.ok(tables.includes('dict_lose_reasons'));
+    assert.ok(tables.includes('dict_owners'));
+    assert.ok(tables.includes('dict_customers'));
+    assert.ok(tables.includes('dict_sales_channels'));
     assert.ok(tables.includes('meta'));
   });
 
@@ -41,7 +45,8 @@ function test(name, fn) {
     const dicts = CRM_DB.listDicts();
     assert.deepEqual(dicts, {
       teams: [], productLines: [], products: [],
-      stages: [], currencies: [], loseReasons: []
+      stages: [], currencies: [], loseReasons: [],
+      owners: [], customers: [], salesChannels: []
     });
   });
 
@@ -82,10 +87,13 @@ function test(name, fn) {
     CRM_DB.clearAll();
     CRM_DB.addDictItem('dict_teams', 'A');
     CRM_DB.addDictItem('dict_teams', 'B');
-    const opp = { id: 'o1', team: 'A', owner: '', oppName: 'n', customer: 'c',
-      productLine: '', product: '', currency: 'USD', stage: 'ST1 线索(Leads)',
-      winRate: 0, amount: 0, amountNet: 0, expectedDate: null,
-      note: '', loseReason: '', deleted: false, parseError: null, position: 0 };
+    // v3.0: amount/amountNet renamed to amountTaxIncluded/amountRmbEquivalent; oppName removed.
+    const opp = { id: 'o1', team: 'A', owner: '', customer: 'c',
+      productLine: '', product: '', salesChannel: '', stage: 'ST1 线索(Leads)',
+      invoiceStatus: '', currency: 'USD',
+      winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0, expectedDate: null,
+      note: '', loseReason: '', dictRefs: null,
+      deleted: false, parseError: null, position: 0 };
     CRM_DB.upsertOpp(opp);
     assert.equal(CRM_DB.countDictRefs('dict_teams', 'A'), 1);
     assert.equal(CRM_DB.countDictRefs('dict_teams', 'B'), 0);
@@ -93,28 +101,34 @@ function test(name, fn) {
 
   await test('upsertOpp insert then update', async () => {
     CRM_DB.clearAll();
-    const opp = { id: 'o1', team: '基础业务', owner: '李经理', oppName: '项目A', customer: '客户A',
-      productLine: 'PL1', product: 'P110', currency: 'RMB', stage: 'ST4 赢单(Win)',
-      winRate: 1, amount: 1000, amountNet: 885, expectedDate: 46023,
-      note: 'note', loseReason: '', deleted: false, parseError: null, position: 1 };
+    // v3.0: amount/amountNet → amountTaxIncluded/amountRmbEquivalent; oppName removed.
+    const opp = { id: 'o1', team: '基础业务', owner: '李经理', customer: '客户A',
+      productLine: 'PL1', product: 'P110', salesChannel: '', stage: 'ST4 赢单(Win)',
+      invoiceStatus: '', currency: 'RMB',
+      winRate: 1, amountTaxIncluded: 1000, amountRmbEquivalent: 885, expectedDate: 46023,
+      note: 'note', loseReason: '', dictRefs: null,
+      deleted: false, parseError: null, position: 1 };
     CRM_DB.upsertOpp(opp);
     let got = CRM_DB.getOpp('o1');
-    assert.equal(got.oppName, '项目A');
-    assert.equal(got.amount, 1000);
+    assert.equal(got.customer, '客户A');
+    assert.equal(got.amountTaxIncluded, 1000);
     // Update
-    got.amount = 2000;
+    got.amountTaxIncluded = 2000;
     CRM_DB.upsertOpp(got);
     const after = CRM_DB.getOpp('o1');
-    assert.equal(after.amount, 2000);
+    assert.equal(after.amountTaxIncluded, 2000);
     assert.equal(CRM_DB.listOpps().length, 1);
   });
 
   await test('softDeleteOpp + listOpps (default excludes deleted)', async () => {
     CRM_DB.clearAll();
-    const opp = { id: 'o1', team: 'A', owner: '', oppName: 'n', customer: 'c',
-      productLine: '', product: '', currency: 'USD', stage: 'ST1',
-      winRate: 0, amount: 0, amountNet: 0, expectedDate: null,
-      note: '', loseReason: '', deleted: false, parseError: null, position: 1 };
+    // v3.0: oppName removed; amount fields renamed; new v3.0 fields added.
+    const opp = { id: 'o1', team: 'A', owner: '', customer: 'c',
+      productLine: '', product: '', salesChannel: '', stage: 'ST1',
+      invoiceStatus: '', currency: 'USD',
+      winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0, expectedDate: null,
+      note: '', loseReason: '', dictRefs: null,
+      deleted: false, parseError: null, position: 1 };
     CRM_DB.upsertOpp(opp);
     assert.equal(CRM_DB.listOpps().length, 1);
     CRM_DB.softDeleteOpp('o1');
@@ -124,10 +138,13 @@ function test(name, fn) {
 
   await test('undeleteOpp restores', async () => {
     CRM_DB.clearAll();
-    const opp = { id: 'o1', team: '', owner: '', oppName: 'n', customer: '',
-      productLine: '', product: '', currency: '', stage: '',
-      winRate: 0, amount: 0, amountNet: 0, expectedDate: null,
-      note: '', loseReason: '', deleted: true, parseError: null, position: 1 };
+    // v3.0: oppName removed; amount fields renamed; new v3.0 fields added.
+    const opp = { id: 'o1', team: '', owner: '', customer: '',
+      productLine: '', product: '', salesChannel: '', stage: '',
+      invoiceStatus: '', currency: '',
+      winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0, expectedDate: null,
+      note: '', loseReason: '', dictRefs: null,
+      deleted: true, parseError: null, position: 1 };
     CRM_DB.upsertOpp(opp);
     CRM_DB.undeleteOpp('o1');
     assert.equal(CRM_DB.listOpps().length, 1);
@@ -135,19 +152,26 @@ function test(name, fn) {
 
   await test('listOpps with filter', async () => {
     CRM_DB.clearAll();
+    // v3.0: oppName removed; amount fields renamed; new v3.0 fields added.
     const opps = [
-      { id: '1', team: 'T1', owner: '', oppName: 'n1', customer: 'c',
-        productLine: '', product: '', currency: 'USD', stage: 'ST1',
-        winRate: 0, amount: 100, amountNet: 0, expectedDate: null,
-        note: '', loseReason: '', deleted: false, parseError: null, position: 1 },
-      { id: '2', team: 'T2', owner: '', oppName: 'n2', customer: 'c',
-        productLine: '', product: '', currency: 'RMB', stage: 'ST2',
-        winRate: 0, amount: 200, amountNet: 0, expectedDate: null,
-        note: '', loseReason: '', deleted: false, parseError: null, position: 2 },
-      { id: '3', team: 'T1', owner: '', oppName: 'n3', customer: 'c',
-        productLine: '', product: '', currency: 'USD', stage: 'ST3',
-        winRate: 0, amount: 300, amountNet: 0, expectedDate: null,
-        note: '', loseReason: '', deleted: false, parseError: null, position: 3 }
+      { id: '1', team: 'T1', owner: '', customer: 'c',
+        productLine: '', product: '', salesChannel: '', stage: 'ST1',
+        invoiceStatus: '', currency: 'USD',
+        winRate: 0, amountTaxIncluded: 100, amountRmbEquivalent: 0, expectedDate: null,
+        note: '', loseReason: '', dictRefs: null,
+        deleted: false, parseError: null, position: 1 },
+      { id: '2', team: 'T2', owner: '', customer: 'c',
+        productLine: '', product: '', salesChannel: '', stage: 'ST2',
+        invoiceStatus: '', currency: 'RMB',
+        winRate: 0, amountTaxIncluded: 200, amountRmbEquivalent: 0, expectedDate: null,
+        note: '', loseReason: '', dictRefs: null,
+        deleted: false, parseError: null, position: 2 },
+      { id: '3', team: 'T1', owner: '', customer: 'c',
+        productLine: '', product: '', salesChannel: '', stage: 'ST3',
+        invoiceStatus: '', currency: 'USD',
+        winRate: 0, amountTaxIncluded: 300, amountRmbEquivalent: 0, expectedDate: null,
+        note: '', loseReason: '', dictRefs: null,
+        deleted: false, parseError: null, position: 3 }
     ];
     for (const o of opps) CRM_DB.upsertOpp(o);
     assert.equal(CRM_DB.listOpps({team: 'T1'}).length, 2);

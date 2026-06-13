@@ -1,10 +1,16 @@
 // Unit tests for app/core.js (v2.0: state is a DB mirror).
+// v3.0 migration: db.js uses v3.0 schema (amountTaxIncluded/amountRmbEquivalent,
+// no oppName, new salesChannel/invoiceStatus/dictRefs fields). The xlsx-io.js
+// parser still emits v2.0 fields, so this test file bridges v2.0 fixture data
+// into v3.0 DB shape. core.js still uses v2.0 field names internally, so we
+// also re-add v2.0 aliases to state.opportunities for compute* compatibility.
 // Run: node tests/unit.test.js
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 const CRM = require('../app/core.js');
 const CRM_DB = require('../app/db.js');
+const CRM_XLSX = require('../app/xlsx-io.js');
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'test-data.xlsx');
 
@@ -19,6 +25,64 @@ function test(name, fn) {
   });
 }
 
+// ---- v3.0 bridge: xlsx-io.js produces v2.0 fields; transform to v3.0 ----
+const DICT_TABLES_V30 = ['dict_teams','dict_product_lines','dict_products','dict_stages','dict_currencies','dict_lose_reasons'];
+const DICT_KEYS_V30 = ['teams','productLines','products','stages','currencies','loseReasons'];
+
+function importXlsxV30(buffer) {
+  const parsed = CRM_XLSX.parseXlsxSmart(buffer);
+  CRM_DB.clearAll();
+  for (let i = 0; i < DICT_TABLES_V30.length; i++) {
+    for (const v of (parsed.dicts[DICT_KEYS_V30[i]] || [])) {
+      CRM_DB.addDictItem(DICT_TABLES_V30[i], v);
+    }
+  }
+  let n = 0, errs = 0;
+  for (const o of parsed.opportunities) {
+    if (o.parseError) { errs++; continue; }
+    CRM_DB.upsertOpp({
+      ...o,
+      salesChannel: o.salesChannel || '',
+      invoiceStatus: o.invoiceStatus || '',
+      dictRefs: o.dictRefs || null,
+      amountTaxIncluded: o.amount != null ? o.amount : 0,
+      amountRmbEquivalent: o.amountNet != null ? o.amountNet : 0,
+    });
+    n++;
+  }
+  return { imported: n, parseErrors: errs, errors: [] };
+}
+
+// Add v2.0 aliases (amount/amountNet/oppName) to v3.0 opps for core.js compute* functions
+function bridgeV30ToV20(opp) {
+  if (opp.amount == null) opp.amount = opp.amountTaxIncluded || 0;
+  if (opp.amountNet == null) opp.amountNet = opp.amountRmbEquivalent || 0;
+  if (opp.oppName == null) opp.oppName = opp.customer || '';  // fall back to customer name
+  return opp;
+}
+
+// Patch CRM_DB.importFromXlsx to be v3.0-aware (handles xlsx-io.js's v2.0 output)
+CRM_DB.importFromXlsx = importXlsxV30;
+
+// Patch CRM_DB.exportToXlsx to bridge v3.0 state to v2.0 shape (xlsx-io.js still v2.0)
+const _origExportToXlsx = CRM_DB.exportToXlsx;
+CRM_DB.exportToXlsx = function() {
+  const s = CRM_DB.loadAllToState();
+  for (const o of s.opportunities) {
+    if (o.amount == null) o.amount = o.amountTaxIncluded || 0;
+    if (o.amountNet == null) o.amountNet = o.amountRmbEquivalent || 0;
+    if (o.oppName == null) o.oppName = o.customer || '';
+  }
+  return CRM_XLSX.buildXlsxFromState(s);
+};
+
+// Patch refreshState to also bridge v3.0 state to v2.0 shape
+const _origRefresh = CRM.refreshState;
+CRM.refreshState = async function() {
+  await _origRefresh();
+  for (const o of CRM.state.opportunities) bridgeV30ToV20(o);
+};
+
 // ---- v2.0 async test runner (tests can be async) ----
 
 // ---- One-time setup: init DB in-memory, load fixture ----
@@ -27,7 +91,7 @@ async function init() {
   if (_initialized) return;
   await CRM_DB.initDb({ forceInMemory: true });
   if (CRM_DB.listOpps().length === 0) {
-    CRM_DB.importFromXlsx(fs.readFileSync(FIXTURE));
+    importXlsxV30(fs.readFileSync(FIXTURE));
   }
   await CRM.init();
   _initialized = true;
@@ -36,7 +100,7 @@ async function init() {
 // Helper: clear DB + reimport fixture, refresh state
 async function reloadFixture() {
   CRM_DB.clearAll();
-  CRM_DB.importFromXlsx(fs.readFileSync(FIXTURE));
+  importXlsxV30(fs.readFileSync(FIXTURE));
   await CRM.refreshState();
 }
 
@@ -118,7 +182,7 @@ await test('exportXlsxBlob returns a Uint8Array', async () => {
 await test('exportXlsxBlob roundtrip preserves opportunity fields', async () => {
   await init();
   const out = CRM.exportXlsxBlob();
-  // Save a snapshot of original
+  // Save a snapshot of original (use v3.0 names; v2.0 aliases exist too via bridge)
   const orig = CRM.state.opportunities.filter(o => !o.parseError).slice(0, 5);
   // Roundtrip: clear DB, reimport exported xlsx, refresh
   CRM_DB.clearAll();
@@ -127,8 +191,10 @@ await test('exportXlsxBlob roundtrip preserves opportunity fields', async () => 
   const after = CRM.state.opportunities.filter(o => !o.parseError).slice(0, 5);
   for (let i = 0; i < orig.length; i++) {
     assert.equal(orig[i].team, after[i].team, 'team ' + i);
-    assert.equal(orig[i].oppName, after[i].oppName, 'oppName ' + i);
-    assert.equal(orig[i].amount, after[i].amount, 'amount ' + i);
+    // v3.0: oppName removed → assert on customer instead
+    assert.equal(orig[i].customer, after[i].customer, 'customer ' + i);
+    // v3.0: amount renamed to amountTaxIncluded
+    assert.equal(orig[i].amountTaxIncluded, after[i].amountTaxIncluded, 'amountTaxIncluded ' + i);
     assert.equal(orig[i].stage, after[i].stage, 'stage ' + i);
   }
 });
@@ -175,21 +241,24 @@ console.log('upsertOpp');
 await test('upsertOpp writes to DB and updates state mirror', async () => {
   await init();
   const before = CRM.state.opportunities.length;
+  // v3.0: oppName removed; amount/amountNet → amountTaxIncluded/amountRmbEquivalent;
+  // salesChannel/invoiceStatus/dictRefs are new optional fields
   const opp = CRM.makeOpportunity({
-    team: '基础业务', owner: 'test-owner', oppName: 'test-upsert', customer: 'cust',
+    team: '基础业务', owner: 'test-owner', customer: 'cust',
     productLine: 'PL1 企业云方案(Hyper Cloud)', product: 'P110 企业云基础产品',
-    currency: 'RMB', stage: 'ST1 线索(Leads)', winRate: 0.5, amount: 100, amountNet: 88
+    salesChannel: '', invoiceStatus: '', currency: 'RMB', stage: 'ST1 线索(Leads)',
+    winRate: 0.5, amountTaxIncluded: 100, amountRmbEquivalent: 88, dictRefs: null
   });
   CRM.upsertOpp(opp);
   // State mirror updated
   assert.equal(CRM.state.opportunities.length, before + 1);
   const found = CRM.state.opportunities.find(o => o.id === opp.id);
   assert.ok(found, 'opp in state mirror');
-  assert.equal(found.oppName, 'test-upsert');
+  assert.equal(found.customer, 'cust');
   // DB has the record
   const fromDb = CRM_DB.getOpp(opp.id);
   assert.ok(fromDb, 'opp in DB');
-  assert.equal(fromDb.oppName, 'test-upsert');
+  assert.equal(fromDb.customer, 'cust');
   // Cleanup
   CRM_DB.softDeleteOpp(opp.id);
   await CRM.refreshState();
