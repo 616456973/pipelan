@@ -5,6 +5,7 @@
 
   // ---- Node-only deps (no-op in browser) ----
   const nodePath = (typeof require !== 'undefined') ? require('node:path') : null;
+  const XLSX_IO = (typeof require !== 'undefined') ? require('./xlsx-io.js') : null;
 
   // ---- Lazy init ----
   let SQL = null;
@@ -260,6 +261,39 @@
     scheduleSave();
   }
 
+  // ---- xlsx import / export ----
+  function importFromXlsx(xlsxBuffer) {
+    if (!XLSX_IO) throw new Error('xlsx-io not available (browser mode uses global CRM_XLSX)');
+    const { opportunities, dicts } = XLSX_IO.parseXlsxSmart(xlsxBuffer);
+    // Clear all tables
+    clearAll();
+    // Insert dicts
+    for (const t of DICT_TABLES) {
+      const key = DICT_KEYS[t];
+      if (dicts[key]) {
+        for (const v of dicts[key]) {
+          db.run('INSERT OR IGNORE INTO ' + t + ' VALUES (?)', [v]);
+        }
+      }
+    }
+    // Insert opportunities (skip parseError)
+    let n = 0;
+    const errors = [];
+    for (const opp of opportunities) {
+      if (opp.parseError) { errors.push(opp.parseError); continue; }
+      upsertOpp(opp);
+      n++;
+    }
+    scheduleSave();
+    return { imported: n, parseErrors: errors.length, errors: errors };
+  }
+
+  function exportToXlsx() {
+    if (!XLSX_IO) throw new Error('xlsx-io not available (browser mode uses global CRM_XLSX)');
+    const state = loadAllToState();
+    return XLSX_IO.buildXlsxFromState(state);
+  }
+
   function exportBackup() {
     return db.export();
   }
@@ -281,6 +315,7 @@
     listDict, addDictItem, updateDictItem, deleteDictItem, countDictRefs,
     listDicts, loadAllToState,
     listTables, clearAll,
+    importFromXlsx, exportToXlsx,
     exportBackup, importBackup,
     scheduleSave,
     _setDbForTest
