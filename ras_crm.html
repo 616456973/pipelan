@@ -33,6 +33,7 @@
   <script src="app/ui-dicts.js"></script>
   <script src="app/ui-dashboard.js"></script>
   <script src="app/ui-analysis.js"></script>
+  <script src="app/ui-save.js"></script>
   <script>
     // Tab navigation
     document.querySelectorAll('.tab').forEach(btn => {
@@ -53,14 +54,8 @@
       ind.classList.toggle('modified', CRM.state.modified);
     }
     setInterval(updateModInd, 500);
-    // Save / Open placeholders (Task 16 implements them)
-    document.getElementById('save-btn').onclick = () => { Notify.info('保存功能将在 Task 16 实现'); };
-    document.getElementById('open-btn').onclick = () => { document.getElementById('file-input').click(); };
-    document.getElementById('file-input').onchange = (e) => {
-      const f = e.target.files[0];
-      if (!f) return;
-      Notify.info('打开功能将在 Task 16 实现: ' + f.name);
-    };
+    // Save/Open flow (Task 16)
+    wireSaveOpen();
     // beforeunload guard
     window.addEventListener('beforeunload', (e) => {
       if (CRM.state.modified) {
