@@ -722,3 +722,75 @@ tr.row-changed td {
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+
+/* === Overdue alert card === */
+.overdue-alert {
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(90deg, #fffbeb 0%, #ffffff 30%);
+}
+.overdue-alert tr:hover td {
+  background: #fef3c7;
+}
+
+/* === 本年 KPI section === */
+.kpi-section {
+  border-left: 4px solid var(--primary);
+}
+.year-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.year-kpi-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+.year-kpi-card .label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.year-kpi-card .value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.year-kpi-card.kpi-pct-good {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border-color: #6ee7b7;
+}
+.year-kpi-card.kpi-pct-good .value {
+  color: #047857;
+}
+.year-kpi-card.kpi-pct-ok {
+  background: linear-gradient(135deg, #fefce8, #fef9c3);
+  border-color: #fde047;
+}
+.year-kpi-card.kpi-pct-ok .value {
+  color: #a16207;
+}
+.year-kpi-card.kpi-pct-low {
+  background: linear-gradient(135deg, #fef2f2, #fecaca);
+  border-color: #fca5a5;
+}
+.year-kpi-card.kpi-pct-low .value {
+  color: #b91c1c;
+}
+.kpi-progress-bar {
+  margin-top: 6px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.kpi-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 2px;
+  transition: width 0.3s;
+}

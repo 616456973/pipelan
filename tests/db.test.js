@@ -17,11 +17,11 @@ function test(name, fn) {
   console.log('db');
   const CRM_DB = require('../app/db.js');
 
-  await test('initDb (in-memory) creates 11 tables', async () => {
+  await test('initDb (in-memory) creates 12 tables', async () => {
     await CRM_DB.initDb({ forceInMemory: true });
     const tables = CRM_DB.listTables();
-    // v3.0: 6 dict tables (v1) + 3 new dict tables + oportunidades + meta = 11
-    assert.equal(tables.length, 11);
+    // v3.0: 6 dict tables (v1) + 3 new dict tables + kpi_amounts + oportunidades + meta = 12
+    assert.equal(tables.length, 12);
     assert.ok(tables.includes('oportunidades'));
     assert.ok(tables.includes('dict_teams'));
     assert.ok(tables.includes('dict_product_lines'));
@@ -32,6 +32,7 @@ function test(name, fn) {
     assert.ok(tables.includes('dict_owners'));
     assert.ok(tables.includes('dict_customers'));
     assert.ok(tables.includes('dict_sales_channels'));
+    assert.ok(tables.includes('dict_kpi_amounts'));
     assert.ok(tables.includes('meta'));
   });
 
@@ -46,7 +47,8 @@ function test(name, fn) {
     assert.deepEqual(dicts, {
       teams: [], productLines: [], products: [],
       stages: [], currencies: [], loseReasons: [],
-      owners: [], customers: [], salesChannels: []
+      owners: [], customers: [], salesChannels: [],
+      kpiAmounts: []
     });
   });
 

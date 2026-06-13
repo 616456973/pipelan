@@ -31,12 +31,53 @@
     window.__dashSelectedStage = 'ST4:赢单(Win)';
   }
 
+  // Initialize KPI metric / target defaults for the 本年 KPI section
+  if (typeof window.__dashKpiMetric === 'undefined') {
+    window.__dashKpiMetric = '含税金额';
+  }
+  if (typeof window.__dashKpiTarget === 'undefined') {
+    window.__dashKpiTarget = 0;
+  }
+
   // Stage change handler — re-renders the dashboard
   window.__dashStageChange = function(newStage) {
     window.__dashSelectedStage = newStage;
     renderDashboard();
     Notify.info('已切换到: ' + newStage);
   };
+
+  // Compute the "本年金额" total for the given metric across this year's opps
+  function computeYearAmount(opps, metric) {
+    const thisYear = new Date().getFullYear();
+    const filtered = opps.filter(o => {
+      if (o.deleted || o.parseError) return false;
+      if (!o.expectedDate || isNaN(Number(o.expectedDate))) return false;
+      const d = new Date((Number(o.expectedDate) - 25569) * 86400 * 1000);
+      return d.getUTCFullYear() === thisYear;
+    });
+    // Pattern-match common KPI metric labels (supports custom user-defined ones)
+    const m = String(metric || '').toLowerCase();
+    if (m.includes('含税') || m.includes('总金额') || m.includes('合同')) {
+      return filtered.reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+    }
+    if (m.includes('加权')) {
+      return filtered.reduce((s, o) => s + (o.amountTaxIncluded || 0) * (o.winRate || 0), 0);
+    }
+    if (m.includes('st4') || m.includes('赢单')) {
+      return filtered.filter(o => o.stage && o.stage.indexOf('ST4') >= 0)
+        .reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+    }
+    if (m.includes('已开票')) {
+      return filtered.filter(o => o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款')
+        .reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+    }
+    if (m.includes('已回款')) {
+      return filtered.filter(o => o.invoiceStatus === '已回款')
+        .reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+    }
+    // Fallback: 含税金额
+    return filtered.reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+  }
 
   function renderDashboard() {
     const opps = CRM.state.opportunities;
@@ -124,6 +165,41 @@
       </div>
     </div>
 
+    <!-- 本年 KPI section (new) -->
+    <div class="card kpi-section" id="dash-year-kpi">
+      <div class="card-header">
+        <h3>📅 本年 KPI (${new Date().getFullYear()})</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <label style="font-size:12px; color:var(--muted);">金额口径:</label>
+          <select id="dash-kpi-metric" class="card-tag" style="border:1px solid var(--border); background:#fff; padding:3px 10px; cursor:pointer;">
+            ${(CRM.state.dicts.kpiAmounts || ['含税金额', '加权金额', 'ST4 赢单金额', '已开票金额', '已回款金额']).map(m =>
+              `<option value="${m}" ${m === window.__dashKpiMetric ? 'selected' : ''}>${m}</option>`
+            ).join('')}
+          </select>
+          <button class="btn" id="dash-set-target" style="padding:3px 10px; font-size:11px;">设定目标</button>
+        </div>
+      </div>
+      ${yearKpiHtml()}
+    </div>
+
+    <!-- Overdue alert section (new) -->
+    <div class="card overdue-alert" id="dash-overdue-card">
+      <div class="card-header">
+        <h3>⚠️ 逾期商机预警</h3>
+        <span class="card-tag" id="dash-overdue-count">${CRM.state.opportunities.filter(o => {
+          if (o.deleted || o.parseError) return false;
+          if (!o.expectedDate || isNaN(Number(o.expectedDate))) return false;
+          const d = new Date((Number(o.expectedDate) - 25569) * 86400 * 1000);
+          if (isNaN(d.getTime())) return false;
+          const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+          if (d >= today0) return false;
+          if (o.stage && (o.stage.indexOf('ST4') >= 0 || o.stage.indexOf('ST5') >= 0)) return false;
+          return true;
+        }).length} 条</span>
+      </div>
+      ${overdueHtml(CRM.state.opportunities)}
+    </div>
+
     <!-- Main visualizations (2x2) -->
     <div class="grid-2 dash-grid">
       <div class="card">
@@ -186,6 +262,37 @@
         }
       };
     });
+
+    // KPI metric change — re-render just the year-kpi-grid in place
+    const kpiMetricEl = document.getElementById('dash-kpi-metric');
+    if (kpiMetricEl) kpiMetricEl.onchange = (e) => {
+      window.__dashKpiMetric = e.target.value;
+      const card = document.getElementById('dash-year-kpi');
+      if (card) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = yearKpiHtml();
+        const newGrid = tmp.querySelector('.year-kpi-grid');
+        const oldGrid = card.querySelector('.year-kpi-grid');
+        if (newGrid && oldGrid) oldGrid.parentNode.replaceChild(newGrid, oldGrid);
+      }
+      Notify.info('已切换 KPI 金额口径: ' + e.target.value);
+    };
+
+    // Set target button — prompt for a number, persist in window state, re-render
+    const setTargetBtn = document.getElementById('dash-set-target');
+    if (setTargetBtn) setTargetBtn.onclick = () => {
+      const cur = window.__dashKpiTarget || '';
+      const v = prompt('设定本年度目标金额 (¥):', cur || '');
+      if (v === null) return;
+      const num = parseFloat(String(v).replace(/,/g, ''));
+      if (isNaN(num) || num < 0) {
+        Notify.error('请输入有效的非负数字');
+        return;
+      }
+      window.__dashKpiTarget = num;
+      renderDashboard();
+      Notify.info('本年度目标已设为: ¥' + Math.round(num).toLocaleString());
+    };
   }
 
   function funnelHtml(funnel) {
@@ -237,6 +344,85 @@
         const isCurrent = t.month === currentYM;
         return `<div style="flex:1; text-align:center; ${isCurrent ? 'color:var(--primary); font-weight:600;' : ''}">${t.month.slice(5)}${isCurrent ? ' ●' : ''}</div>`;
       }).join('')}
+    </div>
+  `;
+  }
+
+  // Build the overdue-opportunities table for the alert card
+  function overdueHtml(opps) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const overdue = [];
+    for (const o of opps) {
+      if (o.deleted || o.parseError) continue;
+      if (!o.expectedDate || isNaN(Number(o.expectedDate))) continue;
+      const d = new Date((Number(o.expectedDate) - 25569) * 86400 * 1000);
+      if (isNaN(d.getTime()) || d >= today) continue;
+      if (o.stage && (o.stage.indexOf('ST4') >= 0 || o.stage.indexOf('ST5') >= 0)) continue;
+      const days = Math.floor((today - d) / (1000 * 60 * 60 * 24));
+      overdue.push({ opp: o, days, amount: o.amountTaxIncluded || 0 });
+    }
+    overdue.sort((a, b) => b.amount - a.amount);
+    if (!overdue.length) return '<p class="muted">（无逾期商机）</p>';
+    const top = overdue.slice(0, 5);
+    return `<table>
+    <thead>
+      <tr>
+        <th>商机</th>
+        <th>客户</th>
+        <th>负责人</th>
+        <th>预计落单</th>
+        <th class="num">金额</th>
+        <th>逾期</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${top.map(x => `<tr data-nav='list|${(x.opp.stage || '').replace(/'/g, "\\'")}' style="cursor:pointer;">
+        <td>${x.opp.oppName || ''}</td>
+        <td>${x.opp.customer || ''}</td>
+        <td>${x.opp.owner || ''}</td>
+        <td>${new Date((Number(x.opp.expectedDate) - 25569) * 86400 * 1000).toISOString().slice(0, 10)}</td>
+        <td class="num">¥${Math.round(x.amount).toLocaleString()}</td>
+        <td><span class="tag tag-st5">${x.days} 天</span></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:8px; font-size:11px;">点行跳转商机列表(按阶段筛选)。共 ${overdue.length} 条逾期商机。</p>`;
+  }
+
+  // Build the 本年 KPI grid (4 cards: count / amount / target / completion)
+  function yearKpiHtml() {
+    const thisYear = new Date().getFullYear();
+    const thisYearOpps = CRM.state.opportunities.filter(o => {
+      if (o.deleted || o.parseError) return false;
+      if (!o.expectedDate || isNaN(Number(o.expectedDate))) return false;
+      const d = new Date((Number(o.expectedDate) - 25569) * 86400 * 1000);
+      return d.getUTCFullYear() === thisYear;
+    });
+    const thisYearCount = thisYearOpps.length;
+    const actual = computeYearAmount(CRM.state.opportunities, window.__dashKpiMetric);
+    const target = window.__dashKpiTarget || 0;
+    const pct = target > 0 ? (actual / target * 100) : null;
+    const pctClass = pct == null ? '' : pct >= 100 ? 'kpi-pct-good' : pct >= 70 ? 'kpi-pct-ok' : 'kpi-pct-low';
+    return `
+    <div class="year-kpi-grid">
+      <div class="year-kpi-card">
+        <div class="label">${thisYear} 年商机数</div>
+        <div class="value">${thisYearCount}</div>
+      </div>
+      <div class="year-kpi-card">
+        <div class="label">本年 ${window.__dashKpiMetric}</div>
+        <div class="value">¥${Math.round(actual).toLocaleString()}</div>
+      </div>
+      <div class="year-kpi-card">
+        <div class="label">本年度目标</div>
+        <div class="value">${target > 0 ? '¥' + Math.round(target).toLocaleString() : '未设定'}</div>
+      </div>
+      <div class="year-kpi-card ${pctClass}">
+        <div class="label">完成度</div>
+        <div class="value">${pct != null ? pct.toFixed(1) + '%' : '—'}</div>
+        ${target > 0 ? `<div class="kpi-progress-bar"><div class="kpi-progress-fill" style="width:${Math.min(100, pct)}%;"></div></div>` : ''}
+      </div>
     </div>
   `;
   }
