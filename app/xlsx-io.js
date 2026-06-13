@@ -42,6 +42,15 @@
     throw new Error('XLSX not loaded');
   }
 
+  // Normalize full-width colon ： to half-width : in any string
+  // Reason: xlsx stage values can be either "ST4：赢单(Win)" or "ST4:赢单(Win)"
+  // depending on template version. Dictionary and opportunity stage values must match
+  // for computeKpi/filtering to work.
+  function normalizeStr(s) {
+    if (s == null) return s;
+    return String(s).replace(/：/g, ':');
+  }
+
   function makeId() {
     if (typeof globalThis.crypto !== 'undefined' && globalThis.crypto.randomUUID) {
       return globalThis.crypto.randomUUID();
@@ -117,15 +126,15 @@
       };
 
       try {
-        if (colMap.team !== undefined)           opp.team = cleanStr(row[colMap.team]);
-        if (colMap.owner !== undefined)          opp.owner = cleanStr(row[colMap.owner]);
-        if (colMap.customer !== undefined)       opp.customer = cleanStr(row[colMap.customer]);
-        if (colMap.productLine !== undefined)    opp.productLine = cleanStr(row[colMap.productLine]);
-        if (colMap.product !== undefined)        opp.product = cleanStr(row[colMap.product]);
-        if (colMap.salesChannel !== undefined)   opp.salesChannel = cleanStr(row[colMap.salesChannel]);
-        if (colMap.stage !== undefined)          opp.stage = cleanStr(row[colMap.stage]).replace(/：/g, ':') || 'ST1 线索(Leads)';
-        if (colMap.invoiceStatus !== undefined)  opp.invoiceStatus = cleanStr(row[colMap.invoiceStatus]);
-        if (colMap.currency !== undefined)       opp.currency = cleanStr(row[colMap.currency]);
+        if (colMap.team !== undefined)           opp.team = normalizeStr(cleanStr(row[colMap.team]));
+        if (colMap.owner !== undefined)          opp.owner = normalizeStr(cleanStr(row[colMap.owner]));
+        if (colMap.customer !== undefined)       opp.customer = normalizeStr(cleanStr(row[colMap.customer]));
+        if (colMap.productLine !== undefined)    opp.productLine = normalizeStr(cleanStr(row[colMap.productLine]));
+        if (colMap.product !== undefined)        opp.product = normalizeStr(cleanStr(row[colMap.product]));
+        if (colMap.salesChannel !== undefined)   opp.salesChannel = normalizeStr(cleanStr(row[colMap.salesChannel]));
+        if (colMap.stage !== undefined)          opp.stage = normalizeStr(cleanStr(row[colMap.stage])) || 'ST1 线索(Leads)';
+        if (colMap.invoiceStatus !== undefined)  opp.invoiceStatus = normalizeStr(cleanStr(row[colMap.invoiceStatus]));
+        if (colMap.currency !== undefined)       opp.currency = normalizeStr(cleanStr(row[colMap.currency]));
         if (colMap.winRate !== undefined) {
           const wr = toNumber(row[colMap.winRate]);
           if (wr === null) throw new Error('winRate 不是数字');
@@ -186,7 +195,7 @@
       const colVals = [];
       for (let r = headerRow + 1; r < rows.length; r++) {
         const v = rows[r] ? String(rows[r][c] || '').trim() : '';
-        if (v) colVals.push(v);
+        if (v) colVals.push(normalizeStr(v));
       }
       const headerText = String(rows[headerRow][c] || '').trim();
       cols.push({ c, headerText, values: colVals });

@@ -186,5 +186,48 @@ test('parseXlsxSmart assigns UUID id to every opportunity', () => {
   for (const id of ids) assert.ok(id.length > 0);
 });
 
+test('dict parsing: full-width colon in ST1:线索(Leads) is normalized to half-width', () => {
+  const XLSX_IO = require('../app/xlsx-io.js');
+  // Sheet1 with minimal data, Sheet2 with full-width colon stages
+  const wb = XLSX.utils.book_new();
+  const ws1Data = [
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['#', '团队', '负责人', '商机', '客户', '业务线', '产品', '币种', '阶段', '赢率', '金额', '时间', '备注'],
+    [1, 'T', 'O', 'N', 'C', 'PL', 'P', 'USD', 'ST4：赢单(Win)', 1, 100, 46023, '']
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+  XLSX.utils.book_append_sheet(wb, ws1, 'Sheet1');
+  // Sheet2 with full-width colon in stages
+  const ws2 = XLSX.utils.aoa_to_sheet([
+    ['销售团队', '业务线', '业务/产品', '阶段', '币种'],
+    ['基础业务', 'PL1', 'P110', 'ST4：赢单(Win)', 'USD']
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Sheet2');
+  const bytes = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+  const result = XLSX_IO.parseXlsxSmart(bytes);
+  // Dict stages should have half-width colon
+  assert.ok(result.dicts.stages.includes('ST4:赢单(Win)'),
+    'expected normalized ST4:赢单(Win) in stages, got: ' + JSON.stringify(result.dicts.stages));
+  assert.ok(!result.dicts.stages.some(s => s.includes('：')),
+    'stages should not contain full-width colon');
+  // Opps stage should also be normalized
+  assert.equal(result.opportunities[0].stage, 'ST4:赢单(Win)');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);
