@@ -77,14 +77,27 @@
           <div class="field"><label>销售团队 *</label><select id="f-team-sel">${d.teams.map(t => `<option value="${t}" ${t === opp.team ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-team-sel"></div></div>
           <div class="field"><label>商机名称 *</label><input id="f-oppName" value="${opp.oppName || ''}"><div class="err" id="err-oppName"></div></div>
           <div class="field"><label>客户名称 *</label>
-            <input id="f-customer" list="dl-customers" value="${opp.customer || ''}">
-            <datalist id="dl-customers">${(CRM.state.dicts.customers || []).map(c => `<option value="${c}">`).join('')}</datalist>
+            <div style="display:flex; gap:6px;">
+              <select id="f-customer" style="flex:1;">
+                <option value="">— 请选择 —</option>
+                ${(CRM.state.dicts.customers || []).map(c => `<option value="${c}" ${c === opp.customer ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+              <button type="button" class="btn" id="f-customer-add" title="新增客户到字典">+ 新增</button>
+            </div>
             <div class="err" id="err-customer"></div>
           </div>
           <div class="field"><label>负责人 *</label><input id="f-owner" value="${opp.owner || ''}"><div class="err" id="err-owner"></div></div>
           <div class="field"><label>业务线 *</label><select id="f-productLine">${d.productLines.map(t => `<option value="${t}" ${t === opp.productLine ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-productLine"></div></div>
           <div class="field"><label>业务/产品 *</label><select id="f-product">${productOptions.map(t => `<option value="${t}" ${t === opp.product ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-product"></div></div>
-          <div class="field"><label>销售渠道</label><select id="f-salesChannel">${(d.salesChannels || []).map(t => `<option value="${t}" ${t === opp.salesChannel ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+          <div class="field"><label>销售渠道</label>
+            <div style="display:flex; gap:6px;">
+              <select id="f-salesChannel" style="flex:1;">
+                <option value="">— 请选择 —</option>
+                ${(d.salesChannels || []).map(t => `<option value="${t}" ${t === opp.salesChannel ? 'selected' : ''}>${t}</option>`).join('')}
+              </select>
+              <button type="button" class="btn" id="f-salesChannel-add" title="新增销售渠道到字典">+ 新增</button>
+            </div>
+          </div>
           <div class="field"><label>阶段 *</label><select id="f-stage">${d.stages.map(t => `<option value="${t}" ${t === opp.stage ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-stage"></div></div>
           <div class="field"><label>发票状态</label><select id="f-invoiceStatus">
             <option value="">(无)</option>
@@ -139,15 +152,47 @@
       }
     };
 
-    // 客户 blur 时自动加入 dict_customers
-    document.getElementById('f-customer').onblur = (e) => {
-      const v = (e.target.value || '').trim();
+    // "+ 新增" 按钮:把当前选中的客户值(若有)或弹出 prompt,加入 dict_customers
+    document.getElementById('f-customer-add').onclick = () => {
+      const sel = document.getElementById('f-customer');
+      const cur = (sel.value || '').trim();
+      const v = (prompt('输入新客户名称:', cur) || '').trim();
       if (!v) return;
-      if (!CRM.state.dicts.customers.includes(v)) {
-        CRM.state.dicts.customers.push(v);
-        CRM.markModified();
-        Notify.info('已新增客户到字典: ' + v);
+      if (CRM.state.dicts.customers.includes(v)) {
+        Notify.warn('已存在: ' + v);
+        sel.value = v;
+        return;
       }
+      CRM.state.dicts.customers.push(v);
+      // Add new option to select and select it
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      opt.selected = true;
+      sel.appendChild(opt);
+      CRM.markModified();
+      Notify.info('已新增客户到字典: ' + v);
+    };
+
+    // "+ 新增" 按钮 for 销售渠道
+    document.getElementById('f-salesChannel-add').onclick = () => {
+      const sel = document.getElementById('f-salesChannel');
+      const cur = (sel.value || '').trim();
+      const v = (prompt('输入新销售渠道:', cur) || '').trim();
+      if (!v) return;
+      if (CRM.state.dicts.salesChannels.includes(v)) {
+        Notify.warn('已存在: ' + v);
+        sel.value = v;
+        return;
+      }
+      CRM.state.dicts.salesChannels.push(v);
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      opt.selected = true;
+      sel.appendChild(opt);
+      CRM.markModified();
+      Notify.info('已新增销售渠道到字典: ' + v);
     };
 
     document.getElementById('form-save').onclick = () => submitForm();
