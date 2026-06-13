@@ -68,11 +68,14 @@
   function makeOpportunity(partial) {
     return Object.assign({
       id: (global.crypto && global.crypto.randomUUID) ? global.crypto.randomUUID() : ('id-' + Date.now() + '-' + Math.random().toString(36).slice(2)),
-      team: '', owner: '', oppName: '', customer: '',
-      productLine: '', product: '', currency: '',
+      team: '', owner: '', customer: '',
+      productLine: '', product: '', salesChannel: '',
       stage: 'ST1 线索(Leads)',
-      winRate: 0, amount: 0, amountNet: 0,
+      invoiceStatus: '',
+      currency: '',
+      winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0,
       expectedDate: null, note: '', loseReason: '',
+      dictRefs: null,
       deleted: false, parseError: null, position: 0
     }, partial || {});
   }

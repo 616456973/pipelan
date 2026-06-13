@@ -148,7 +148,20 @@ await test('makeOpportunity() returns object with id and defaults', () => {
   assert.equal(opp.team, '');
   assert.equal(opp.stage, 'ST1 线索(Leads)');
   assert.equal(opp.winRate, 0);
-  assert.equal(opp.amount, 0);
+  assert.equal(opp.amountTaxIncluded, 0);
+  assert.equal(opp.amountRmbEquivalent, 0);
+  assert.equal(opp.salesChannel, '');
+  assert.equal(opp.invoiceStatus, '');
+  assert.equal(opp.dictRefs, null);
+});
+
+test('makeOpportunity v3.0 includes 5 new fields with defaults', () => {
+  const opp = CRM.makeOpportunity();
+  assert.equal(opp.salesChannel, '');
+  assert.equal(opp.invoiceStatus, '');
+  assert.equal(opp.amountTaxIncluded, 0);
+  assert.equal(opp.amountRmbEquivalent, 0);
+  assert.equal(opp.dictRefs, null);
 });
 
 console.log('importFromXlsx');
