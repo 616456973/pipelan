@@ -347,6 +347,21 @@ function test(name, fn) {
     assert.equal(got2.productLine, 'PL2', 'productLine should be correct after upsertOpp on migrated DB');
   });
 
+  await test('runMigrations ensures all dict tables exist on existing DB (e.g. dict_kpi_amounts)', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    // Simulate old DB state: drop dict_kpi_amounts to verify migration re-creates it
+    CRM_DB._execForTest('DROP TABLE IF EXISTS dict_kpi_amounts');
+    // Re-init (which calls runMigrations)
+    await CRM_DB.initDb({ forceInMemory: true });
+    // Now the table should exist again
+    const tables = CRM_DB.listTables();
+    assert.ok(tables.includes('dict_kpi_amounts'), 'dict_kpi_amounts should be re-created by migration');
+    // And it should be queryable
+    CRM_DB.addDictItem('dict_kpi_amounts', 'test metric');
+    const items = CRM_DB.listDict('dict_kpi_amounts');
+    assert.ok(items.includes('test metric'), 'dict_kpi_amounts should accept inserts after migration');
+  });
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed > 0 ? 1 : 0);
 })();

@@ -55,6 +55,8 @@
   function runMigrations() {
     // Make sure meta table exists for version tracking
     db.run(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
+    // ALWAYS ensure all dict tables exist (idempotent, safe for any DB state)
+    ensureAllDictTables();
     const v = getMeta('schema_version');
     if (!v) {
       applyV1Schema();
@@ -69,6 +71,26 @@
       }
       setMeta('schema_version', '2');
     }
+    if (getMeta('schema_version') === '2') {
+      // v2 → v3: ensure dict_kpi_amounts (and any other future dicts) exist for existing DBs
+      // ensureAllDictTables() above already handles this; just bump version
+      setMeta('schema_version', '3');
+    }
+  }
+
+  // Idempotent: creates all dict tables (safe to call on any DB state).
+  // New dict tables added in future versions should also be listed here.
+  function ensureAllDictTables() {
+    db.run(`CREATE TABLE IF NOT EXISTS dict_teams (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_product_lines (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_products (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_stages (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_currencies (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_lose_reasons (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_owners (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_customers (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_sales_channels (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_kpi_amounts (value TEXT PRIMARY KEY);`);
   }
 
   function applyV1Schema() {
