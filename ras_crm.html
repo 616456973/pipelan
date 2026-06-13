@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>RAS CRM</title>
   <link rel="stylesheet" href="app/styles.css">
+  <script src="vendor/sqljs/sql-wasm.js"></script>
   <script src="vendor/sheetjs/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -15,27 +16,29 @@
     <button class="tab" data-tab="analysis">分析</button>
     <button class="tab" data-tab="dicts">字典</button>
     <span class="spacer"></span>
-    <span class="file-info">
-      <span class="modified-indicator" id="mod-ind"></span>
-      <span id="file-name">(未打开)</span>
-    </span>
-    <button class="btn" id="open-btn">打开</button>
-    <button class="btn btn-primary" id="save-btn">保存</button>
+    <span class="db-status" id="db-status">●</span>
+    <button class="btn" id="import-btn">📥 导入</button>
+    <button class="btn" id="export-btn">📤 导出</button>
+    <button class="btn" id="backup-btn">💾 备份</button>
+    <button class="btn" id="restore-btn">📂 恢复</button>
   </div>
   <div class="container" id="content">
     <div class="card">
       <h2>开始使用</h2>
-      <p>本应用以 xlsx 文件作为数据库, 浏览器不会保存任何数据到本地。</p>
+      <p>本应用使用 SQLite (sql.js) 作为数据库, 自动保存到浏览器的 IndexedDB。</p>
       <ol style="line-height: 1.9;">
-        <li>点击右上角 <b>"打开"</b> 选择一个 xlsx 文件 (例如 <code>RAS CRM（template） (version0529).xlsx</code>)</li>
+        <li>点击右上角 <b>"📥 导入"</b> 选择一个 xlsx 文件 (例如 <code>RAS CRM（template） (version0529).xlsx</code>)</li>
         <li>在 <b>"商机"</b> 标签查看/编辑数据, <b>"仪表盘"</b> 看 KPI, <b>"字典"</b> 管理下拉选项</li>
-        <li>点 <b>"保存"</b> 后, 浏览器会 <b>下载一个带时间戳的 xlsx</b> 到你的 <code>Downloads</code> 文件夹, 文件名形如 <code>ras_crm_20260613_141530.xlsx</code></li>
-        <li>你需要 <b>手动把下载的文件</b> 移回 / 覆盖原文件 (浏览器无法直接写本地任意路径)</li>
+        <li>点 <b>"📤 导出"</b> 后, 浏览器会 <b>下载一个带时间戳的 xlsx</b> 到你的 <code>Downloads</code> 文件夹, 文件名形如 <code>ras_crm_20260613_141530.xlsx</code></li>
+        <li>点 <b>"💾 备份"</b> 可以下载一个 <code>.sqlite</code> 文件, 包含完整的数据库 (含字典)。点 <b>"📂 恢复"</b> 可以从之前备份的 <code>.sqlite</code> 文件还原。</li>
+        <li>所有改动 <b>自动保存</b> 到浏览器, 不需要手动点保存 (顶栏 <code>●</code> 表示已加载, <code>○</code> 表示空数据库)。</li>
       </ol>
-      <p class="muted">首次保存会弹"样式丢失"提醒, 这是 SheetJS 库的限制 (数据完整, 仅丢失原 Excel 格式). 点"确定"后不再提醒.</p>
     </div>
   </div>
-  <input type="file" id="file-input" accept=".xlsx" style="display:none">
+  <input type="file" id="import-input" accept=".xlsx" style="display:none">
+  <input type="file" id="restore-input" accept=".sqlite,.db" style="display:none">
+  <script src="app/xlsx-io.js"></script>
+  <script src="app/db.js"></script>
   <script src="app/core.js"></script>
   <script src="app/ui-notify.js"></script>
   <script src="app/ui-list.js"></script>
@@ -56,23 +59,15 @@
         }
       };
     });
-    // Modified indicator
-    function updateModInd() {
-      const ind = document.getElementById('mod-ind');
-      const name = document.getElementById('file-name');
-      if (CRM.state.fileName) name.textContent = CRM.state.fileName;
-      ind.classList.toggle('modified', CRM.state.modified);
-    }
-    setInterval(updateModInd, 500);
-    // Save/Open flow (Task 16)
-    wireSaveOpen();
-    // beforeunload guard
-    window.addEventListener('beforeunload', (e) => {
-      if (CRM.state.modified) {
-        e.preventDefault();
-        e.returnValue = '有未保存的改动，确定离开？';
-      }
-    });
+    // Topbar import/export/backup/restore flow (Task D)
+    wireImportExport();
+    // Initialize DB + render dashboard
+    (async () => {
+      await CRM_DB.initDb();
+      await CRM.init();
+      const dash = document.querySelector('.tab[data-tab="dashboard"]');
+      if (dash) dash.click();
+    })();
   </script>
 </body>
 </html>

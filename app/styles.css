@@ -54,14 +54,16 @@ html, body {
 .tab.active { background: rgba(255, 255, 255, .2); color: #fff; font-weight: 600; }
 .topbar .spacer { flex: 1; }
 .topbar .file-info { font-size: 12px; opacity: .9; }
-.topbar .modified-indicator {
-  display: inline-block;
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, .4);
+.topbar .db-status {
+  font-size: 12px;
+  opacity: 0.95;
   margin-right: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 500;
 }
-.topbar .modified-indicator.modified { background: #f59e0b; }
+.topbar .db-status.empty { color: #f59e0b; }
+.topbar .db-status.loaded { color: #10b981; }
 .btn {
   background: #fff;
   color: var(--text);
