@@ -294,15 +294,6 @@
     });
   }
 
-  function computeStageConversion(opps) {
-    const funnel = computeFunnel(opps);
-    return funnel.map((item, i) => {
-      if (i === 0) return Object.assign({}, item, { conversion: null });
-      const prev = funnel[i - 1].count;
-      return Object.assign({}, item, { conversion: prev > 0 ? item.count / prev : 0 });
-    });
-  }
-
   const api = { state, reset, makeOpportunity, markModified, parseXlsx, buildXlsx, validateOpportunity, computeKpi, computeFunnel, computeStageConversion };
 
   if (typeof module !== 'undefined' && module.exports) {
