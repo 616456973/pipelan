@@ -242,5 +242,31 @@ test('parse: 商机名称 column is read into oppName field', () => {
     'oppName should be populated from 商机名称 column');
 });
 
+test('parse: expectedDate Date object from xlsx is converted to Excel serial', () => {
+  const XLSX_IO = require('../app/xlsx-io.js');
+  // Build xlsx with a real Date object in the date column
+  const wb = XLSX.utils.book_new();
+  const ws1Data = [];
+  for (let i = 0; i < 16; i++) ws1Data.push(new Array(15).fill(''));
+  ws1Data.push(['#', '团队', '负责人', '商机', '客户', '业务线', '产品', '币种', '阶段', '赢率', '含税', '不含税', '预计落单时间', '备注']);
+  // 2026-01-12 UTC = Excel serial 46034 (depending on TZ, may vary by 1)
+  ws1Data.push([1, 'T', 'O', 'N', 'C', 'PL', 'P', 'RMB', 'ST1', 0.5, 100, 90, new Date('2026-01-12T00:00:00Z'), '']);
+  const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+  // Mark the data date cell as date-formatted (so SheetJS returns Date despite cellDates:false)
+  // Header is at r=16, data row is at r=17
+  const cellRef = XLSX.utils.encode_cell({ r: 17, c: 12 });
+  ws1[cellRef].z = 'yyyy-mm-dd';
+  ws1[cellRef].t = 'd';
+  ws1[cellRef].v = new Date('2026-01-12T00:00:00Z');
+  ws1['!ref'] = 'A1:O18';
+  XLSX.utils.book_append_sheet(wb, ws1, 'Sheet1');
+  const bytes = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+  const result = XLSX_IO.parseXlsxSmart(bytes);
+  const ed = result.opportunities[0].expectedDate;
+  assert.equal(typeof ed, 'number', 'expectedDate should be a number, not a Date');
+  // 46034 = 2026-01-12. Allow ±1 day for timezone interpretation.
+  assert.ok(ed >= 46033 && ed <= 46035, 'expectedDate should be around 46034 (Jan 12 2026), got: ' + ed);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);

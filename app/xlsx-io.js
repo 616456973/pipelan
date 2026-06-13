@@ -158,7 +158,14 @@
         }
         if (colMap.expectedDate !== undefined) {
           const d = row[colMap.expectedDate];
-          opp.expectedDate = (d === undefined || d === '' || d === null) ? null : d;
+          if (d == null || d === '') {
+            opp.expectedDate = null;
+          } else if (d instanceof Date) {
+            // Convert JS Date to Excel serial (1900 system, matching other date math in the codebase)
+            opp.expectedDate = Math.round((d.getTime() / 86400000) + 25569);
+          } else {
+            opp.expectedDate = d;
+          }
         }
         if (colMap.note !== undefined)        opp.note = cleanStr(row[colMap.note]);
         if (colMap.loseReason !== undefined)  opp.loseReason = cleanStr(row[colMap.loseReason]);
