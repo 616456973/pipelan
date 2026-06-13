@@ -5,6 +5,7 @@
 
   // ---- Column name aliases (key -> array of accepted header names) ----
   const COLUMN_ALIASES = {
+    oppName:        ['商机名称', '商机', '项目名称', 'Opp Name', 'Opportunity'],
     team:           ['销售团队', '团队', 'Team'],
     owner:          ['主责销售', '负责人', '责任人', 'Sales Rep', 'Owner', '销售负责人'],
     customer:       ['客户名称', '客户', '客户公司', 'Customer'],
@@ -126,6 +127,7 @@
       };
 
       try {
+        if (colMap.oppName !== undefined)  opp.oppName = normalizeStr(cleanStr(row[colMap.oppName]));
         if (colMap.team !== undefined)           opp.team = normalizeStr(cleanStr(row[colMap.team]));
         if (colMap.owner !== undefined)          opp.owner = normalizeStr(cleanStr(row[colMap.owner]));
         if (colMap.customer !== undefined)       opp.customer = normalizeStr(cleanStr(row[colMap.customer]));

@@ -229,5 +229,18 @@ test('dict parsing: full-width colon in ST1:线索(Leads) is normalized to half-
   assert.equal(result.opportunities[0].stage, 'ST4:赢单(Win)');
 });
 
+test('parse: 商机名称 column is read into oppName field', () => {
+  const XLSX_IO = require('../app/xlsx-io.js');
+  const headers = ['#', '销售团队', '主责销售', '商机名称', '客户名称',
+    '业务线', '业务线产品', '币种', '阶段', '赢单概率',
+    '含税金额', '不含税金额', '预计落单时间', '备注'];
+  const rows = [[1, '基础业务', '李经理', '重要商机XYZ', '客户A',
+    'PL1', 'P110', 'RMB', 'ST4:赢单(Win)', 1, 1000, 885, 46023, '已开票']];
+  const bytes = buildXlsx({ headers, rows });
+  const result = XLSX_IO.parseXlsxSmart(bytes);
+  assert.equal(result.opportunities[0].oppName, '重要商机XYZ',
+    'oppName should be populated from 商机名称 column');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);
