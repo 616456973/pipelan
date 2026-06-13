@@ -23,6 +23,19 @@
     dbEmpty: true
   };
 
+  // ---- v3.0 Built-in Enums (NOT in DB, hardcoded) ----
+  const BUILTIN_INVOICE_STATUSES = ['未开发票', '已开票', '合同中', '已回款', '已预付'];
+
+  // ---- v3.0 Exchange Rates to RMB (hardcoded, refresh in v3.1) ----
+  const EXCHANGE_RATES_TO_RMB = { USD: 7.2, SGD: 5.3, RMB: 1.0 };
+
+  // Helper: convert amount to RMB equivalent
+  function toRmb(amount, currency) {
+    if (amount == null || isNaN(amount)) return 0;
+    const rate = EXCHANGE_RATES_TO_RMB[currency] || 1.0;
+    return amount * rate;
+  }
+
   async function init() {
     // In browser, db.js is already initialized at app startup. In Node (tests),
     // caller must invoke CRM_DB.initDb({forceInMemory:true}) first. This init just refreshes state.
