@@ -268,5 +268,34 @@ test('parse: expectedDate Date object from xlsx is converted to Excel serial', (
   assert.ok(ed >= 46033 && ed <= 46035, 'expectedDate should be around 46034 (Jan 12 2026), got: ' + ed);
 });
 
+test('parse: owners/customers/salesChannels extracted from Sheet1 even when Sheet2 has the 5 standard dicts', () => {
+  const XLSX_IO = require('../app/xlsx-io.js');
+  // Use the existing buildXlsx helper, but we need both Sheet1 (with full headers) and Sheet2
+  const wb = XLSX.utils.book_new();
+  const ws1Data = [];
+  for (let i = 0; i < 16; i++) ws1Data.push(new Array(10).fill(''));
+  ws1Data.push(['#', '销售团队', '主责销售', '商机名称', '客户名称', '业务线', '业务线产品', '销售渠道', '阶段', '赢单概率']);
+  ws1Data.push([1, '渠道业务部', '张晶晶', '项目A', '智元创新', 'PL1', 'P120 企业数字化解决方案', '字节跳动', 'ST4:赢单(Win)', 1]);
+  ws1Data.push([2, '渠道业务部', '李密思', '项目B', '翼华科技', 'PL2', 'P210 企业云管理服务', '直签', 'ST4:赢单(Win)', 1]);
+  const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+  XLSX.utils.book_append_sheet(wb, ws1, 'Sheet1');
+  const ws2 = XLSX.utils.aoa_to_sheet([
+    ['销售团队', '业务线', '业务/产品', '阶段', '币种'],
+    ['渠道业务部', 'PL1', 'P110 企业云产品', 'ST1:线索(Leads)', 'RMB']
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Sheet2');
+  const bytes = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
+  const result = XLSX_IO.parseXlsxSmart(bytes);
+  assert.ok(result.dicts.owners.includes('张晶晶'), 'owners should include 张晶晶');
+  assert.ok(result.dicts.owners.includes('李密思'), 'owners should include 李密思');
+  assert.ok(result.dicts.customers.includes('智元创新'), 'customers should include 智元创新');
+  assert.ok(result.dicts.customers.includes('翼华科技'), 'customers should include 翼华科技');
+  assert.ok(result.dicts.salesChannels.includes('字节跳动'), 'salesChannels should include 字节跳动');
+  assert.ok(result.dicts.salesChannels.includes('直签'), 'salesChannels should include 直签');
+  // Sheet2's 5 standard dicts should still be populated
+  assert.ok(result.dicts.teams.includes('渠道业务部'), 'teams from Sheet2 should be preserved');
+  assert.ok(result.dicts.products.includes('P110 企业云产品'), 'products from Sheet2 should be preserved');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);

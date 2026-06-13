@@ -270,19 +270,16 @@
       dicts = parseSheet2Smart([]);
     }
 
-    // If Sheet2 didn't populate any dict (or was missing), infer dicts from Sheet1 data
-    const totalDictItems = dicts.teams.length + dicts.productLines.length + dicts.products.length
-      + dicts.stages.length + dicts.currencies.length;
-    if (totalDictItems === 0) {
-      let inferred;
-      if (headerRowIdx >= 0) {
-        inferred = inferDictsFromSheet1(rows1, headerRowIdx, colMap);
-      } else {
-        // No header found at all: scan all data rows for value patterns
-        inferred = inferDictsFromValues(rows1);
-      }
-      dicts = mergeDicts(dicts, inferred);
+    // Always supplement dicts from Sheet1 data — handles dict types (owners, customers,
+    // salesChannels) that only exist as Sheet1 columns and aren't in Sheet2. mergeDicts
+    // is additive so Sheet2's existing values aren't overwritten.
+    let inferred = { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [] };
+    if (headerRowIdx >= 0) {
+      inferred = inferDictsFromSheet1(rows1, headerRowIdx, colMap);
+    } else {
+      inferred = inferDictsFromValues(rows1);
     }
+    dicts = mergeDicts(dicts, inferred);
 
     return { opportunities, dicts };
   }
@@ -310,7 +307,7 @@
     // For each column, look up its dict classification via the header
     for (let c = 0; c < maxCol; c++) {
       const headerText = String(headerRow[c] || '').trim();
-      const vals = dataRows.map(r => String(r[c] || '').trim()).filter(v => v);
+      const vals = dataRows.map(r => String(r[c] || '').trim()).filter(v => v).map(normalizeStr);
       if (!vals.length) continue;
       // Try each dict key (first match wins, but for the same key all matching columns are added)
       for (const [dictKey, classifier] of Object.entries(DICT_CLASSIFICATION)) {
@@ -336,7 +333,7 @@
     const channelRe = /^(字节跳动|翼华科技|直签|渠道|代理)$/;
     for (const row of rows) {
       for (const cell of (row || [])) {
-        const v = String(cell || '').trim();
+        const v = normalizeStr(String(cell || '').trim());
         if (!v) continue;
         if (teamRe.test(v)) dicts.teams = mergeUnique(dicts.teams, [v]);
         else if (plRe.test(v)) dicts.productLines = mergeUnique(dicts.productLines, [v]);

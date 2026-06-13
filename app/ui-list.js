@@ -17,6 +17,18 @@
     return Array.from(set);
   }
 
+  async function upsertAndRender(opp) {
+    // Persist to DB
+    if (window.CRM_DB && CRM_DB.upsertOpp) {
+      CRM_DB.upsertOpp(opp);
+    }
+    // Update in-memory state
+    const idx = CRM.state.opportunities.findIndex(o => o.id === opp.id);
+    if (idx >= 0) CRM.state.opportunities[idx] = opp;
+    // Re-render the list
+    renderList();
+  }
+
   function stageCode(stage) {
     if (!stage) return 'other';
     const m = String(stage).toUpperCase().match(/ST\s*([1-9])/);
@@ -30,6 +42,15 @@
     if (status.indexOf('已预付') >= 0) return 'prepaid';
     if (status.indexOf('合同中') >= 0) return 'contracting';
     return 'other';
+  }
+
+  function serialToDateStr(serial) {
+    if (!serial) return '';
+    const n = Number(serial);
+    if (isNaN(n) || n <= 0) return '';
+    const d = new Date((n - 25569) * 86400 * 1000);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().slice(0, 10);
   }
 
   function renderFilters() {
@@ -73,15 +94,24 @@
       <tr class="${cls}" ${errTitle}>
         <td>${idx + 1}</td>
         <td>${o.team || ''}</td>
-        <td>${o.owner || ''}</td>
+        <td><select class="cell-edit" onchange="window.__inlineEdit('${o.id}','owner',this.value)" data-prev="${(o.owner || '').replace(/"/g,'&quot;')}">
+          <option value="">—</option>
+          ${(CRM.state.dicts.owners || []).map(v => `<option value="${v}" ${v === o.owner ? 'selected' : ''}>${v}</option>`).join('')}
+        </select></td>
         <td>${o.oppName || ''}</td>
         <td>${o.customer || ''}</td>
         <td>${o.productLine || ''}</td>
         <td>${o.product || ''}</td>
-        <td><span class="tag stage-${stageCode(o.stage)}">${o.stage || ''}</span></td>
-        <td><span class="tag inv-${invCode(o.invoiceStatus)}">${o.invoiceStatus || ''}</span></td>
+        <td><select class="cell-edit" onchange="window.__inlineEdit('${o.id}','stage',this.value)" data-prev="${(o.stage || '').replace(/"/g,'&quot;')}">
+          ${(CRM.state.dicts.stages || []).map(v => `<option value="${v}" ${v === o.stage ? 'selected' : ''}>${v}</option>`).join('')}
+        </select></td>
+        <td><select class="cell-edit" onchange="window.__inlineEdit('${o.id}','invoiceStatus',this.value)" data-prev="${(o.invoiceStatus || '').replace(/"/g,'&quot;')}">
+          <option value="">—</option>
+          ${['未开发票', '已开票', '合同中', '已回款', '已预付'].map(s => `<option value="${s}" ${s === o.invoiceStatus ? 'selected' : ''}>${s}</option>`).join('')}
+        </select></td>
         <td class="num">${(o.amountTaxIncluded || 0).toLocaleString()}</td>
         <td>${Math.round((o.winRate || 0) * 100)}%</td>
+        <td>${serialToDateStr(o.expectedDate)}</td>
         <td>${o.deleted ? '已删除' : `<button class="btn btn-danger" onclick="deleteOpp('${o.id}')">删除</button>`}</td>
       </tr>
     `;
@@ -142,18 +172,19 @@
             <col style="width:80px">       <!-- 发票状态 -->
             <col style="width:110px">      <!-- 含税金额 -->
             <col style="width:64px">       <!-- 赢率 -->
+            <col style="width:96px">       <!-- 预计落单时间 -->
             <col style="width:64px">       <!-- 操作 -->
           </colgroup>
           <thead><tr>
             <th>#</th><th>团队</th><th>负责人</th><th>商机</th><th>客户</th>
             <th>业务线</th><th>产品</th><th>阶段</th><th>发票状态</th>
             <th class="num">含税金额</th>
-            <th>赢率</th><th>操作</th>
+            <th>赢率</th><th>预计落单</th><th>操作</th>
           </tr></thead>
           <tbody>${filtered.map((o, i) => rowHtml(o, i)).join('')}</tbody>
           <tfoot>
             <tr>
-              <td colspan="9" style="text-align:right;"><b>合计</b> (共 ${totals.count} 条)</td>
+              <td colspan="10" style="text-align:right;"><b>合计</b> (共 ${totals.count} 条)</td>
               <td class="num" title="按币种: ${Object.entries(totals.byCurrency).map(([c,v])=>c+':'+Math.round(v).toLocaleString()).join(' / ')}">
                 <b>${Object.keys(totals.byCurrency).map(c => c).join('/') || '-'}</b>
               </td>
@@ -175,6 +206,19 @@
     renderList();
     Notify.info('已删除: ' + o.oppName);
   }
+
+  window.__inlineEdit = function(id, field, newVal) {
+    const opp = CRM.state.opportunities.find(o => o.id === id);
+    if (!opp) return;
+    const oldVal = opp[field];
+    if (oldVal === newVal) return;
+    opp[field] = newVal;
+    // Persist
+    try { CRM_DB.upsertOpp(opp); } catch (e) { /* swallow */ }
+    // Cascade: re-render so the tfoot totals and any dependent UI refresh
+    renderList();
+    Notify.info('已更新 ' + (field === 'invoiceStatus' ? '发票状态' : field === 'owner' ? '负责人' : '阶段') + ': ' + (oldVal || '(空)') + ' → ' + (newVal || '(空)'));
+  };
 
   global.renderList = renderList;
   global.deleteOpp = deleteOpp;
