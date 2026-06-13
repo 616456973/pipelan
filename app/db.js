@@ -371,6 +371,7 @@
     importFromXlsx, exportToXlsx,
     exportBackup, importBackup,
     scheduleSave,
+    getMeta, setMeta,
     _execForTest: (sql) => db.exec(sql),
     _setDbForTest
   };

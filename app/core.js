@@ -418,6 +418,18 @@
   // Kept for backward compatibility with existing call sites.
   function markModified() {}
 
+  // ---- KPI target persistence (stored in meta table; value in 元) ----
+  function getKpiTarget() {
+    const v = getDb().getMeta('kpi_target');
+    return v ? parseFloat(String(v)) || 0 : 0;
+  }
+
+  function setKpiTarget(value) {
+    const num = Number(value) || 0;
+    getDb().setMeta('kpi_target', String(num));
+    return num;
+  }
+
   // ---- Export ----
   const api = {
     state,
@@ -430,7 +442,8 @@
     upsertOpp,
     addDictValue, updateDictValue, deleteDictValue, markModified,
     syncDictsFromOpps,
-    markOppsAsChanged
+    markOppsAsChanged,
+    getKpiTarget, setKpiTarget
   };
 
   if (typeof module !== 'undefined' && module.exports) {

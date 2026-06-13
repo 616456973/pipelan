@@ -35,8 +35,13 @@
   if (typeof window.__dashKpiMetric === 'undefined') {
     window.__dashKpiMetric = '含税金额';
   }
+  // Read persisted target from DB (default 0 if not set)
   if (typeof window.__dashKpiTarget === 'undefined') {
-    window.__dashKpiTarget = 0;
+    try {
+      window.__dashKpiTarget = (typeof CRM !== 'undefined' && CRM.getKpiTarget) ? CRM.getKpiTarget() : 0;
+    } catch (e) {
+      window.__dashKpiTarget = 0;
+    }
   }
 
   // Stage change handler — re-renders the dashboard
@@ -278,20 +283,27 @@
       Notify.info('已切换 KPI 金额口径: ' + e.target.value);
     };
 
-    // Set target button — prompt for a number, persist in window state, re-render
+    // Set target button — prompt for a number (in 万元), persist to DB (in 元), re-render
     const setTargetBtn = document.getElementById('dash-set-target');
     if (setTargetBtn) setTargetBtn.onclick = () => {
       const cur = window.__dashKpiTarget || '';
-      const v = prompt('设定本年度目标金额 (¥):', cur || '');
+      // Prompt in 万元, store in 元
+      const v = prompt('设定本年度目标 (万元):', cur ? (cur / 10000).toString() : '');
       if (v === null) return;
-      const num = parseFloat(String(v).replace(/,/g, ''));
-      if (isNaN(num) || num < 0) {
+      const numWan = parseFloat(String(v).replace(/,/g, ''));
+      if (isNaN(numWan) || numWan < 0) {
         Notify.error('请输入有效的非负数字');
         return;
       }
-      window.__dashKpiTarget = num;
+      // Store in 元 internally
+      const numYuan = numWan * 10000;
+      window.__dashKpiTarget = numYuan;
+      // Persist to DB
+      if (typeof CRM !== 'undefined' && CRM.setKpiTarget) {
+        CRM.setKpiTarget(numYuan);
+      }
       renderDashboard();
-      Notify.info('本年度目标已设为: ¥' + Math.round(num).toLocaleString());
+      Notify.info('本年度目标已设为: ¥' + numWan.toLocaleString(undefined, {maximumFractionDigits: 1}) + ' 万');
     };
   }
 
@@ -401,9 +413,11 @@
     });
     const thisYearCount = thisYearOpps.length;
     const actual = computeYearAmount(CRM.state.opportunities, window.__dashKpiMetric);
-    const target = window.__dashKpiTarget || 0;
+    const target = window.__dashKpiTarget || 0;  // stored in 元
     const pct = target > 0 ? (actual / target * 100) : null;
     const pctClass = pct == null ? '' : pct >= 100 ? 'kpi-pct-good' : pct >= 70 ? 'kpi-pct-ok' : 'kpi-pct-low';
+    // Display target in 万元 (divide by 10000)
+    const targetDisplay = target > 0 ? '¥' + (target / 10000).toLocaleString(undefined, {maximumFractionDigits: 2}) + ' 万' : '未设定';
     return `
     <div class="year-kpi-grid">
       <div class="year-kpi-card">
@@ -412,11 +426,11 @@
       </div>
       <div class="year-kpi-card">
         <div class="label">本年 ${window.__dashKpiMetric}</div>
-        <div class="value">¥${Math.round(actual).toLocaleString()}</div>
+        <div class="value">¥${(actual / 10000).toLocaleString(undefined, {maximumFractionDigits: 1})} 万</div>
       </div>
       <div class="year-kpi-card">
         <div class="label">本年度目标</div>
-        <div class="value">${target > 0 ? '¥' + Math.round(target).toLocaleString() : '未设定'}</div>
+        <div class="value">${targetDisplay}</div>
       </div>
       <div class="year-kpi-card ${pctClass}">
         <div class="label">完成度</div>
