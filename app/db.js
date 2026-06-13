@@ -203,6 +203,7 @@
   }
 
   function upsertOpp(opp) {
+    const cols = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, dict_refs, deleted, parse_error, position';
     const params = [
       opp.id, opp.oppName || '',
       opp.team, opp.owner, opp.customer,
@@ -213,7 +214,7 @@
       opp.deleted ? 1 : 0, opp.parseError, opp.position || 0
     ];
     const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
-    db.run('INSERT OR REPLACE INTO oportunidades VALUES (' + placeholders + ')', params);
+    db.run('INSERT OR REPLACE INTO oportunidades (' + cols + ') VALUES (' + placeholders + ')', params);
     scheduleSave();
   }
 

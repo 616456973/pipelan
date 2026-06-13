@@ -259,27 +259,54 @@ function test(name, fn) {
     assert.equal(got.oppName, '重要商机', 'oppName should roundtrip through DB');
   });
 
-  await test('migration: existing DB without opp_name column gets ALTER TABLE added', async () => {
-    // Simulate an old v1 DB: init, then drop opp_name to simulate v1 state, then re-init
+  await test('migration: v1 DB (no opp_name) survives v1→v2 migration with correct data', async () => {
+    // Step 1: Initialize a fresh v1-shaped DB
     await CRM_DB.initDb({ forceInMemory: true });
     CRM_DB.clearAll();
-    // Drop opp_name column to simulate v1 state
+    // Simulate a v1 DB: drop opp_name AND reset schema_version to 1
+    // (so the migration will actually run on the backup import)
     CRM_DB._execForTest('ALTER TABLE oportunidades DROP COLUMN opp_name');
-    // Re-run initDb which should detect and re-add the column via migration
+    CRM_DB._execForTest("DELETE FROM meta WHERE key='schema_version'");
+    // Insert a v1-shaped opp WITHOUT calling upsertOpp (which requires opp_name in params).
+    // Use raw SQL with the v1 column list (no opp_name):
+    CRM_DB._execForTest(
+      "INSERT INTO oportunidades (id, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, dict_refs, deleted, parse_error, position) " +
+      "VALUES ('o1', 'TeamA', 'OwnerA', 'CustA', 'PL1', 'P110', '', 'ST1', '', 'USD', 0.5, 100, 100, null, '', '', null, 0, null, 1)"
+    );
+    // Step 3: Export the v1 DB
+    const backup = CRM_DB.exportBackup();
+    // Step 4: Re-init a fresh in-memory DB (this calls runMigrations on the imported backup)
     await CRM_DB.initDb({ forceInMemory: true });
-    // Try inserting with oppName
-    const opp = {
-      id: 'o1', oppName: 'after-migration', team: '', owner: '', customer: '',
-      productLine: '', product: '', salesChannel: '', stage: '',
-      invoiceStatus: '', currency: 'USD',
-      winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0,
-      expectedDate: null, note: '', loseReason: '', dictRefs: null,
-      deleted: false, parseError: null, position: 1
-    };
-    CRM_DB.upsertOpp(opp);
+    CRM_DB.importBackup(backup);
+    // Step 5: Verify migration ran: opp_name column should exist AND data should be intact
+    const cols = CRM_DB._execForTest('PRAGMA table_info(oportunidades)');
+    const colNames = cols[0].values.map(c => c[1]);
+    assert.ok(colNames.includes('opp_name'), 'opp_name column should exist after migration');
+    // Verify data was preserved (team/owner/customer should be at their CORRECT logical positions,
+    // not corrupted by the off-by-one bug we're fixing)
     const got = CRM_DB.getOpp('o1');
-    assert.equal(got.oppName, 'after-migration',
-      'oppName should work after migration adds opp_name column');
+    assert.equal(got.team, 'TeamA', 'team field should be correct after migration + column-list INSERT');
+    assert.equal(got.owner, 'OwnerA', 'owner field should be correct after migration + column-list INSERT');
+    assert.equal(got.customer, 'CustA', 'customer field should be correct after migration + column-list INSERT');
+    assert.equal(got.oppName, '', 'oppName should be empty string (default) for v1-migrated data');
+    // Step 6: After migration, opp_name is the LAST physical column (position 21).
+    // Verify that calling upsertOpp (which uses positional INSERT) still maps fields correctly
+    // thanks to the column-list INSERT fix. Without the fix, the positional INSERT would
+    // misalign every field by one (oppName would land in the team slot, team in owner, etc.).
+    CRM_DB.upsertOpp({
+      id: 'o2', oppName: 'migrated-name', team: 'TeamB', owner: 'OwnerB', customer: 'CustB',
+      productLine: 'PL2', product: 'P220', salesChannel: '', stage: 'ST2',
+      invoiceStatus: '', currency: 'RMB',
+      winRate: 0.8, amountTaxIncluded: 200, amountRmbEquivalent: 200,
+      expectedDate: null, note: '', loseReason: '', dictRefs: null,
+      deleted: false, parseError: null, position: 2
+    });
+    const got2 = CRM_DB.getOpp('o2');
+    assert.equal(got2.oppName, 'migrated-name', 'oppName should be correct after upsertOpp on migrated DB');
+    assert.equal(got2.team, 'TeamB', 'team should be correct after upsertOpp on migrated DB');
+    assert.equal(got2.owner, 'OwnerB', 'owner should be correct after upsertOpp on migrated DB');
+    assert.equal(got2.customer, 'CustB', 'customer should be correct after upsertOpp on migrated DB');
+    assert.equal(got2.productLine, 'PL2', 'productLine should be correct after upsertOpp on migrated DB');
   });
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
