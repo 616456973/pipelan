@@ -80,10 +80,9 @@
       Notify.warn('已存在: ' + trimmed);
       return;
     }
-    CRM.state.dicts[field].push(trimmed);
-    CRM.markModified();
+    CRM.addDictValue(field, trimmed);
     renderDicts();
-    Notify.info('已新增');
+    Notify.info('已新增: ' + trimmed);
   }
 
   function editDict(field, idx) {
@@ -97,30 +96,20 @@
       Notify.warn('已存在: ' + trimmed);
       return;
     }
-    CRM.state.dicts[field][idx] = trimmed;
-    CRM.markModified();
+    CRM.updateDictValue(field, old, trimmed);
     renderDicts();
-    Notify.info('已修改（关联商机已自动更新引用）');
+    Notify.info('已修改: ' + old + ' → ' + trimmed + ' (关联商机已自动更新引用)');
   }
 
   function deleteDict(field, idx) {
     const v = CRM.state.dicts[field][idx];
     const refCount = countReferences(v, field);
     if (refCount > 0) {
-      const oppField = FIELD_TO_OPP[field];
       if (!confirm(`有 ${refCount} 条商机引用了 "${v}"。\n删除后这些商机的字段会变成"未分类"。\n确认删除？`)) return;
-      for (const o of CRM.state.opportunities) {
-        if (o.deleted || o.parseError) continue;
-        if (oppField && o[oppField] === v) o[oppField] = '未分类';
-        if (field === 'loseReasons' && o.loseReason) {
-          o.loseReason = o.loseReason.split(',').filter(r => r !== v).join(',');
-        }
-      }
     }
-    CRM.state.dicts[field].splice(idx, 1);
-    CRM.markModified();
+    CRM.deleteDictValue(field, v);
     renderDicts();
-    Notify.info('已删除');
+    Notify.info('已删除: ' + v + (refCount > 0 ? ' (引用已重置为"未分类")' : ''));
   }
 
   global.renderDicts = renderDicts;

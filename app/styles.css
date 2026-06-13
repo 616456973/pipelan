@@ -156,6 +156,7 @@ code {
 
 /* === Tables === */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table col { min-width: 0; }
 th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
 th { background: var(--surface-2); font-weight: 600; color: var(--text-2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
 tr:hover td { background: var(--surface-2); }

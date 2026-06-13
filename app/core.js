@@ -257,6 +257,87 @@
     else state.opportunities.push(opp);
   }
 
+  // ---- Dict CRUD (persists to DB + updates state mirror) ----
+  const DICT_TABLE = {
+    teams: 'dict_teams', owners: 'dict_owners', customers: 'dict_customers',
+    productLines: 'dict_product_lines', products: 'dict_products',
+    salesChannels: 'dict_sales_channels', stages: 'dict_stages',
+    currencies: 'dict_currencies', loseReasons: 'dict_lose_reasons'
+  };
+  const DICT_TO_OPP_FIELD = {
+    teams: 'team', owners: 'owner', customers: 'customer',
+    productLines: 'productLine', products: 'product',
+    salesChannels: 'salesChannel', stages: 'stage', currencies: 'currency'
+    // loseReasons: stored as comma-separated in opp.loseReason
+  };
+
+  function addDictValue(key, value) {
+    const table = DICT_TABLE[key];
+    if (!table) return false;
+    getDb().addDictItem(table, value);
+    if (state.dicts[key] && !state.dicts[key].includes(value)) {
+      state.dicts[key].push(value);
+    }
+    return true;
+  }
+
+  function updateDictValue(key, oldVal, newVal) {
+    const table = DICT_TABLE[key];
+    if (!table) return false;
+    getDb().updateDictItem(table, oldVal, newVal);
+    // Update state mirror
+    if (state.dicts[key]) {
+      const i = state.dicts[key].indexOf(oldVal);
+      if (i >= 0) state.dicts[key][i] = newVal;
+    }
+    // Cascade: also update opps that reference this value
+    const oppField = DICT_TO_OPP_FIELD[key];
+    if (oppField) {
+      for (const o of state.opportunities) {
+        if (o[oppField] === oldVal) o[oppField] = newVal;
+      }
+    }
+    // For loseReasons, opp.loseReason is comma-separated
+    if (key === 'loseReasons') {
+      for (const o of state.opportunities) {
+        if (o.loseReason && o.loseReason.split(',').map(s => s.trim()).includes(oldVal)) {
+          o.loseReason = o.loseReason.split(',').map(s => s.trim() === oldVal ? newVal : s.trim()).join(',');
+        }
+      }
+    }
+    return true;
+  }
+
+  function deleteDictValue(key, value) {
+    const table = DICT_TABLE[key];
+    if (!table) return false;
+    getDb().deleteDictItem(table, value);
+    // Update state mirror
+    if (state.dicts[key]) {
+      const i = state.dicts[key].indexOf(value);
+      if (i >= 0) state.dicts[key].splice(i, 1);
+    }
+    // Cascade: rewrite references to '未分类' (per existing convention)
+    const oppField = DICT_TO_OPP_FIELD[key];
+    if (oppField) {
+      for (const o of state.opportunities) {
+        if (o[oppField] === value) o[oppField] = '未分类';
+      }
+    }
+    if (key === 'loseReasons') {
+      for (const o of state.opportunities) {
+        if (o.loseReason) {
+          o.loseReason = o.loseReason.split(',').map(s => s.trim()).filter(s => s && s !== value).join(',');
+        }
+      }
+    }
+    return true;
+  }
+
+  // No-op: db.js already auto-saves on every db.run via scheduleSave().
+  // Kept for backward compatibility with existing call sites.
+  function markModified() {}
+
   // ---- Export ----
   const api = {
     state,
@@ -266,7 +347,8 @@
     computeTrend, computeTopN, computePareto, computeLoseReasonAgg,
     importXlsxFile, exportXlsxBlob,
     downloadBackup, restoreFromBackup,
-    upsertOpp
+    upsertOpp,
+    addDictValue, updateDictValue, deleteDictValue, markModified
   };
 
   if (typeof module !== 'undefined' && module.exports) {
