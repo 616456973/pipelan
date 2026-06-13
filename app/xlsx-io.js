@@ -122,7 +122,7 @@
         productLine: '', product: '', salesChannel: '', stage: '',
         invoiceStatus: '', currency: '',
         winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0,
-        expectedDate: null, note: '', loseReason: '',
+        expectedDate: null, note: '', loseReason: '', dictRefs: null,
         deleted: false, parseError: null, position: r + 1
       };
 
