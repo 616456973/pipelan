@@ -15,6 +15,24 @@
     { key: 'st4st5', label: '8. ST4 vs ST5 对比' }
   ];
 
+  let pivotConfig = { xField: 'product', yMetric: 'amount' };
+
+  const PIVOT_FIELDS = [
+    { key: 'product', label: '产品' },
+    { key: 'productLine', label: '业务线' },
+    { key: 'team', label: '团队' },
+    { key: 'owner', label: '负责人' },
+    { key: 'customer', label: '客户' },
+    { key: 'stage', label: '阶段' },
+    { key: 'salesChannel', label: '销售渠道' },
+    { key: 'invoiceStatus', label: '发票状态' }
+  ];
+  const PIVOT_METRICS = [
+    { key: 'amount', label: '总金额' },
+    { key: 'weighted', label: '加权金额' },
+    { key: 'count', label: '数量' }
+  ];
+
   function filteredOpps() {
     const fs = window.CRM_FILTERS || {};
     let opps = CRM.state.opportunities;
@@ -43,7 +61,13 @@
     else if (currentView === 'pareto') body.innerHTML = viewPareto(opps);
     else if (currentView === 'conversion') body.innerHTML = viewConversion(opps);
     else if (currentView === 'lose') body.innerHTML = viewLose(opps);
-    else if (currentView === 'pivot') body.innerHTML = viewPivot(opps);
+    else if (currentView === 'pivot') {
+      body.innerHTML = viewPivot(opps);
+      const px = document.getElementById('pv-x');
+      const py = document.getElementById('pv-y');
+      if (px) px.onchange = (e) => { pivotConfig.xField = e.target.value; renderAnalysis(); };
+      if (py) py.onchange = (e) => { pivotConfig.yMetric = e.target.value; renderAnalysis(); };
+    }
     else if (currentView === 'st4st5') body.innerHTML = viewSt4St5(opps);
   }
 
@@ -140,27 +164,36 @@
   }
 
   function viewPivot(opps) {
+    const xField = pivotConfig.xField;
+    const yMetric = pivotConfig.yMetric;
     const groups = {};
     for (const o of opps) {
-      const k = o.product || '(未分类)';
-      if (!groups[k]) groups[k] = { name: k, count: 0, amount: 0 };
+      const k = o[xField] || '(未分类)';
+      if (!groups[k]) groups[k] = { name: k, count: 0, amount: 0, weighted: 0 };
       groups[k].count++;
-      groups[k].amount += o.amount;
+      groups[k].amount += (o.amountTaxIncluded || 0);
+      groups[k].weighted += (o.amountTaxIncluded || 0) * (o.winRate || 0);
     }
-    const arr = Object.values(groups).sort((a, b) => b.amount - a.amount);
+    const arr = Object.values(groups).sort((a, b) => (b[yMetric] || 0) - (a[yMetric] || 0));
+    const total = arr.reduce((s, i) => s + (i[yMetric] || 0), 0) || 1;
+    const xSelect = PIVOT_FIELDS.map(f => `<option value="${f.key}" ${f.key === xField ? 'selected' : ''}>${f.label}</option>`).join('');
+    const ySelect = PIVOT_METRICS.map(m => `<option value="${m.key}" ${m.key === yMetric ? 'selected' : ''}>${m.label}</option>`).join('');
     return `<div class="card">
-      <h3>多维透视 (产品 x 数量/金额)</h3>
-      <table>
-        <thead><tr><th>产品</th><th>数量</th><th>总金额</th><th>占比</th></tr></thead>
-        <tbody>${(() => {
-          const total = arr.reduce((s, i) => s + i.amount, 0) || 1;
-          return arr.map(i => `<tr>
-            <td>${i.name}</td><td>${i.count}</td><td>${i.amount.toLocaleString()}</td>
-            <td>${(i.amount / total * 100).toFixed(1)}%</td>
-          </tr>`).join('');
-        })()}</tbody>
-      </table>
-    </div>`;
+    <h3>多维透视 (${opps.length} 条数据)</h3>
+    <div class="filters" style="margin-bottom:14px;">
+      <label>X 轴 <select id="pv-x">${xSelect}</select></label>
+      <label>指标 <select id="pv-y">${ySelect}</select></label>
+    </div>
+    <table>
+      <thead><tr><th>${PIVOT_FIELDS.find(f => f.key === xField).label}</th><th>数量</th><th>${PIVOT_METRICS.find(m => m.key === yMetric).label}</th><th>占比</th></tr></thead>
+      <tbody>${arr.map(i => `<tr>
+        <td>${i.name}</td>
+        <td class="num">${i.count}</td>
+        <td class="num">${(i[yMetric] || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+        <td>${((i[yMetric] || 0) / total * 100).toFixed(1)}%</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
   }
 
   function viewSt4St5(opps) {
