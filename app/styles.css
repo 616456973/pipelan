@@ -459,3 +459,12 @@ table select.cell-edit:focus {
   background: #fff;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
 }
+
+/* Editing row highlight */
+tr.row-editing {
+  background: #fef9c3 !important;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+tr.row-editing td {
+  background: #fef9c3;
+}

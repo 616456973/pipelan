@@ -9,6 +9,9 @@
     showDeleted: false
   };
 
+  // Row-level edit state. null = no row in edit mode; otherwise the opp.id being edited.
+  let editingId = null;
+
   function uniqueValues(field) {
     const set = new Set();
     for (const o of CRM.state.opportunities) {
@@ -88,31 +91,33 @@
   }
 
   function rowHtml(o, idx) {
-    const cls = o.parseError ? 'row-error' : (o.deleted ? 'row-deleted' : '');
+    const cls = o.parseError ? 'row-error' : (o.deleted ? 'row-deleted' : (editingId === o.id ? 'row-editing' : ''));
     const errTitle = o.parseError ? `title="行 ${o.parseError.row}: ${o.parseError.message}"` : '';
+    const safeId = o.id.replace(/'/g, "\\'");
+    const isEditing = editingId === o.id;
     return `
       <tr class="${cls}" ${errTitle}>
         <td>${idx + 1}</td>
         <td>${o.team || ''}</td>
-        <td><select class="cell-edit" onchange="window.__inlineEdit('${o.id}','owner',this.value)" data-prev="${(o.owner || '').replace(/"/g,'&quot;')}">
-          <option value="">—</option>
-          ${(CRM.state.dicts.owners || []).map(v => `<option value="${v}" ${v === o.owner ? 'selected' : ''}>${v}</option>`).join('')}
-        </select></td>
+        <td>${isEditing
+          ? `<select id="ed-owner-${safeId}" class="cell-edit"><option value="">—</option>${(CRM.state.dicts.owners || []).map(v => `<option value="${v}" ${v === o.owner ? 'selected' : ''}>${v}</option>`).join('')}</select>`
+          : (o.owner || '')}</td>
         <td>${o.oppName || ''}</td>
         <td>${o.customer || ''}</td>
         <td>${o.productLine || ''}</td>
         <td>${o.product || ''}</td>
-        <td><select class="cell-edit" onchange="window.__inlineEdit('${o.id}','stage',this.value)" data-prev="${(o.stage || '').replace(/"/g,'&quot;')}">
-          ${(CRM.state.dicts.stages || []).map(v => `<option value="${v}" ${v === o.stage ? 'selected' : ''}>${v}</option>`).join('')}
-        </select></td>
-        <td><select class="cell-edit" onchange="window.__inlineEdit('${o.id}','invoiceStatus',this.value)" data-prev="${(o.invoiceStatus || '').replace(/"/g,'&quot;')}">
-          <option value="">—</option>
-          ${['未开发票', '已开票', '合同中', '已回款', '已预付'].map(s => `<option value="${s}" ${s === o.invoiceStatus ? 'selected' : ''}>${s}</option>`).join('')}
-        </select></td>
+        <td>${isEditing
+          ? `<select id="ed-stage-${safeId}" class="cell-edit">${(CRM.state.dicts.stages || []).map(v => `<option value="${v}" ${v === o.stage ? 'selected' : ''}>${v}</option>`).join('')}</select>`
+          : `<span class="tag stage-${stageCode(o.stage)}">${o.stage || ''}</span>`}</td>
+        <td>${isEditing
+          ? `<select id="ed-invoiceStatus-${safeId}" class="cell-edit"><option value="">—</option>${['未开发票', '已开票', '合同中', '已回款', '已预付'].map(s => `<option value="${s}" ${s === o.invoiceStatus ? 'selected' : ''}>${s}</option>`).join('')}</select>`
+          : `<span class="tag inv-${invCode(o.invoiceStatus)}">${o.invoiceStatus || ''}</span>`}</td>
         <td class="num">${(o.amountTaxIncluded || 0).toLocaleString()}</td>
         <td>${Math.round((o.winRate || 0) * 100)}%</td>
         <td>${serialToDateStr(o.expectedDate)}</td>
-        <td>${o.deleted ? '已删除' : `<button class="btn btn-danger" onclick="deleteOpp('${o.id}')">删除</button>`}</td>
+        <td>${isEditing
+          ? `<button class="btn btn-primary" onclick="window.__saveRow('${safeId}')">保存</button> <button class="btn" onclick="window.__cancelEdit()">取消</button>`
+          : (o.deleted ? '已删除' : `<button class="btn" onclick="window.__startEdit('${safeId}')">编辑</button> <button class="btn btn-danger" onclick="deleteOpp('${safeId}')">删除</button>`)}</td>
       </tr>
     `;
   }
@@ -207,17 +212,39 @@
     Notify.info('已删除: ' + o.oppName);
   }
 
-  window.__inlineEdit = function(id, field, newVal) {
+  window.__startEdit = function(id) {
+    editingId = id;
+    renderList();
+  };
+
+  window.__saveRow = function(id) {
     const opp = CRM.state.opportunities.find(o => o.id === id);
     if (!opp) return;
-    const oldVal = opp[field];
-    if (oldVal === newVal) return;
-    opp[field] = newVal;
+    const oldOwner = opp.owner;
+    const oldStage = opp.stage;
+    const oldInvoice = opp.invoiceStatus;
+    // Read values from the 3 selects
+    const ownerEl = document.getElementById('ed-owner-' + id);
+    const stageEl = document.getElementById('ed-stage-' + id);
+    const invEl = document.getElementById('ed-invoiceStatus-' + id);
+    if (!stageEl) return;  // row not in edit mode
+    opp.owner = ownerEl ? ownerEl.value : '';
+    opp.stage = stageEl.value;
+    opp.invoiceStatus = invEl ? invEl.value : '';
     // Persist
-    try { CRM_DB.upsertOpp(opp); } catch (e) { /* swallow */ }
-    // Cascade: re-render so the tfoot totals and any dependent UI refresh
+    try { CRM_DB.upsertOpp(opp); } catch (e) { console.error('save failed', e); Notify.error('保存失败: ' + e.message); }
+    editingId = null;
     renderList();
-    Notify.info('已更新 ' + (field === 'invoiceStatus' ? '发票状态' : field === 'owner' ? '负责人' : '阶段') + ': ' + (oldVal || '(空)') + ' → ' + (newVal || '(空)'));
+    const changes = [];
+    if (oldOwner !== opp.owner) changes.push('负责人');
+    if (oldStage !== opp.stage) changes.push('阶段');
+    if (oldInvoice !== opp.invoiceStatus) changes.push('发票状态');
+    Notify.info('已保存' + (changes.length ? ': ' + changes.join('/') : ' (无变化)'));
+  };
+
+  window.__cancelEdit = function() {
+    editingId = null;
+    renderList();
   };
 
   global.renderList = renderList;

@@ -17,7 +17,7 @@
   // ---- State (DB mirror) ----
   const state = {
     opportunities: [],
-    dicts: { teams: [], productLines: [], products: [], stages: [], currencies: [], loseReasons: [] },
+    dicts: { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [], loseReasons: [] },
     fileName: '',
     fileLoaded: false,
     dbEmpty: true
@@ -46,10 +46,14 @@
     const s = getDb().loadAllToState();
     state.opportunities = s.opportunities;
     state.dicts = s.dicts;
+    syncDictsFromOpps();  // Auto-populate customer/product/salesChannel/owner from existing opps
     state.dbEmpty = state.opportunities.length === 0 &&
                     state.dicts.teams.length === 0 &&
+                    state.dicts.owners.length === 0 &&
+                    state.dicts.customers.length === 0 &&
                     state.dicts.productLines.length === 0 &&
                     state.dicts.products.length === 0 &&
+                    state.dicts.salesChannels.length === 0 &&
                     state.dicts.stages.length === 0 &&
                     state.dicts.currencies.length === 0 &&
                     state.dicts.loseReasons.length === 0;
@@ -58,10 +62,55 @@
   function reset() {
     // Reset in-memory mirror only. Does NOT touch DB. For full DB wipe, use db.clearAll.
     state.opportunities = [];
-    state.dicts = { teams: [], productLines: [], products: [], stages: [], currencies: [], loseReasons: [] };
+    state.dicts = { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [], loseReasons: [] };
     state.fileName = '';
     state.fileLoaded = false;
     state.dbEmpty = true;
+  }
+
+  // Auto-populate customer/product/salesChannel/owner dicts from existing opportunities.
+  // Idempotent: re-running does not add duplicates.
+  // Scans non-deleted, non-parseError opps and ensures their values exist in the dicts (state + DB).
+  function syncDictsFromOpps() {
+    // Collect unique values from opps
+    const customers = new Set(state.dicts.customers || []);
+    const products = new Set(state.dicts.products || []);
+    const salesChannels = new Set(state.dicts.salesChannels || []);
+    const owners = new Set(state.dicts.owners || []);
+    for (const o of state.opportunities) {
+      if (o.deleted || o.parseError) continue;
+      if (o.customer) customers.add(o.customer);
+      if (o.product) products.add(o.product);
+      if (o.salesChannel) salesChannels.add(o.salesChannel);
+      if (o.owner) owners.add(o.owner);
+    }
+    // Find new values (not in current state.dicts)
+    const newCustomers = [...customers].filter(c => !(state.dicts.customers || []).includes(c));
+    const newProducts = [...products].filter(p => !(state.dicts.products || []).includes(p));
+    const newSalesChannels = [...salesChannels].filter(s => !(state.dicts.salesChannels || []).includes(s));
+    const newOwners = [...owners].filter(o => !(state.dicts.owners || []).includes(o));
+    // Persist new values to DB
+    try {
+      const db = getDb();
+      for (const c of newCustomers) db.addDictItem('dict_customers', c);
+      for (const p of newProducts) db.addDictItem('dict_products', p);
+      for (const s of newSalesChannels) db.addDictItem('dict_sales_channels', s);
+      for (const o of newOwners) db.addDictItem('dict_owners', o);
+    } catch (e) {
+      console.error('syncDictsFromOpps: DB write failed', e);
+    }
+    // Update state mirror
+    state.dicts.customers = [...customers];
+    state.dicts.products = [...products];
+    state.dicts.salesChannels = [...salesChannels];
+    state.dicts.owners = [...owners];
+    // Return what was added (for caller info, optional)
+    return {
+      customers: newCustomers.length,
+      products: newProducts.length,
+      salesChannels: newSalesChannels.length,
+      owners: newOwners.length
+    };
   }
 
   // ---- Opportunity factory + pure validators ----
@@ -348,7 +397,8 @@
     importXlsxFile, exportXlsxBlob,
     downloadBackup, restoreFromBackup,
     upsertOpp,
-    addDictValue, updateDictValue, deleteDictValue, markModified
+    addDictValue, updateDictValue, deleteDictValue, markModified,
+    syncDictsFromOpps
   };
 
   if (typeof module !== 'undefined' && module.exports) {
