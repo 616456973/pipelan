@@ -357,7 +357,7 @@
       if (o.deleted) continue;
       if (o.parseError) continue;
       sheet1Rows.push([
-        n++, o.team, o.owner, o.customer, '',
+        n++, o.team, o.owner, o.customer, o.oppName || '',
         o.productLine, o.product, o.salesChannel || '', o.stage, o.invoiceStatus || '',
         o.currency, o.winRate,
         o.amountTaxIncluded, o.amountRmbEquivalent, o.expectedDate === null ? '' : o.expectedDate,

@@ -56,8 +56,19 @@
     // Make sure meta table exists for version tracking
     db.run(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
     const v = getMeta('schema_version');
-    if (!v) applyV1Schema();
-    setMeta('schema_version', '1');
+    if (!v) {
+      applyV1Schema();
+      setMeta('schema_version', '1');
+    }
+    if (getMeta('schema_version') === '1') {
+      // v1 → v2: add opp_name column if missing
+      const cols = db.exec("PRAGMA table_info(oportunidades)");
+      const hasOppName = cols[0] && cols[0].values.some(c => c[1] === 'opp_name');
+      if (!hasOppName) {
+        db.run("ALTER TABLE oportunidades ADD COLUMN opp_name TEXT DEFAULT ''");
+      }
+      setMeta('schema_version', '2');
+    }
   }
 
   function applyV1Schema() {
@@ -73,6 +84,7 @@
     db.run(`CREATE TABLE IF NOT EXISTS dict_sales_channels (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS oportunidades (
       id TEXT PRIMARY KEY,
+      opp_name TEXT,
       team TEXT, owner TEXT, customer TEXT,
       product_line TEXT, product TEXT, sales_channel TEXT,
       stage TEXT, invoice_status TEXT, currency TEXT,
@@ -150,23 +162,24 @@
   // ---- CRUD: Opportunities ----
   function rowToOpp(row) {
     return {
-      id: row[0], team: row[1] || '', owner: row[2] || '',
-      customer: row[3] || '',
-      productLine: row[4] || '', product: row[5] || '',
-      salesChannel: row[6] || '', stage: row[7] || '',
-      invoiceStatus: row[8] || '',
-      currency: row[9] || '',
-      winRate: row[10] == null ? 0 : row[10],
-      amountTaxIncluded: row[11] == null ? 0 : row[11],
-      amountRmbEquivalent: row[12] == null ? 0 : row[12],
-      expectedDate: row[13], note: row[14] || '', loseReason: row[15] || '',
-      dictRefs: row[16] || null,
-      deleted: !!row[17], parseError: row[18] || null,
-      position: row[19] || 0
+      id: row[0], oppName: row[1] || '',
+      team: row[2] || '', owner: row[3] || '',
+      customer: row[4] || '',
+      productLine: row[5] || '', product: row[6] || '',
+      salesChannel: row[7] || '', stage: row[8] || '',
+      invoiceStatus: row[9] || '',
+      currency: row[10] || '',
+      winRate: row[11] == null ? 0 : row[11],
+      amountTaxIncluded: row[12] == null ? 0 : row[12],
+      amountRmbEquivalent: row[13] == null ? 0 : row[13],
+      expectedDate: row[14], note: row[15] || '', loseReason: row[16] || '',
+      dictRefs: row[17] || null,
+      deleted: !!row[18], parseError: row[19] || null,
+      position: row[20] || 0
     };
   }
 
-  const COLS = 'id, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, dict_refs, deleted, parse_error, position';
+  const COLS = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, dict_refs, deleted, parse_error, position';
 
   function listOpps(opts) {
     opts = opts || {};
@@ -191,14 +204,15 @@
 
   function upsertOpp(opp) {
     const params = [
-      opp.id, opp.team, opp.owner, opp.customer,
+      opp.id, opp.oppName || '',
+      opp.team, opp.owner, opp.customer,
       opp.productLine, opp.product, opp.salesChannel, opp.stage,
       opp.invoiceStatus, opp.currency,
       opp.winRate, opp.amountTaxIncluded, opp.amountRmbEquivalent,
       opp.expectedDate, opp.note, opp.loseReason, opp.dictRefs,
       opp.deleted ? 1 : 0, opp.parseError, opp.position || 0
     ];
-    const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
+    const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
     db.run('INSERT OR REPLACE INTO oportunidades VALUES (' + placeholders + ')', params);
     scheduleSave();
   }
@@ -333,6 +347,7 @@
     importFromXlsx, exportToXlsx,
     exportBackup, importBackup,
     scheduleSave,
+    _execForTest: (sql) => db.exec(sql),
     _setDbForTest
   };
 

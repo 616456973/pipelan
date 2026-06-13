@@ -58,7 +58,6 @@ function importXlsxV30(buffer) {
 function bridgeV30ToV20(opp) {
   if (opp.amount == null) opp.amount = opp.amountTaxIncluded || 0;
   if (opp.amountNet == null) opp.amountNet = opp.amountRmbEquivalent || 0;
-  if (opp.oppName == null) opp.oppName = opp.customer || '';  // fall back to customer name
   return opp;
 }
 

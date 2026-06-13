@@ -243,6 +243,45 @@ function test(name, fn) {
     assert.equal(CRM_DB.countDictRefs('dict_owners', 'Bob'), 0);
   });
 
+  await test('oportunidades schema v2 includes opp_name column', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.clearAll();
+    const opp = {
+      id: 'o1', oppName: '重要商机', team: 'T', owner: 'O', customer: 'C',
+      productLine: 'PL1', product: 'P110', salesChannel: '', stage: 'ST1',
+      invoiceStatus: '', currency: 'USD',
+      winRate: 0.5, amountTaxIncluded: 100, amountRmbEquivalent: 100,
+      expectedDate: null, note: '', loseReason: '', dictRefs: null,
+      deleted: false, parseError: null, position: 1
+    };
+    CRM_DB.upsertOpp(opp);
+    const got = CRM_DB.getOpp('o1');
+    assert.equal(got.oppName, '重要商机', 'oppName should roundtrip through DB');
+  });
+
+  await test('migration: existing DB without opp_name column gets ALTER TABLE added', async () => {
+    // Simulate an old v1 DB: init, then drop opp_name to simulate v1 state, then re-init
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.clearAll();
+    // Drop opp_name column to simulate v1 state
+    CRM_DB._execForTest('ALTER TABLE oportunidades DROP COLUMN opp_name');
+    // Re-run initDb which should detect and re-add the column via migration
+    await CRM_DB.initDb({ forceInMemory: true });
+    // Try inserting with oppName
+    const opp = {
+      id: 'o1', oppName: 'after-migration', team: '', owner: '', customer: '',
+      productLine: '', product: '', salesChannel: '', stage: '',
+      invoiceStatus: '', currency: 'USD',
+      winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0,
+      expectedDate: null, note: '', loseReason: '', dictRefs: null,
+      deleted: false, parseError: null, position: 1
+    };
+    CRM_DB.upsertOpp(opp);
+    const got = CRM_DB.getOpp('o1');
+    assert.equal(got.oppName, 'after-migration',
+      'oppName should work after migration adds opp_name column');
+  });
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed > 0 ? 1 : 0);
 })();

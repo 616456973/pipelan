@@ -51,8 +51,8 @@ async function loadOppsV30(p) {
   return CRM_DB.listOpps({ includeDeleted: true })
     .filter(o => !o.deleted && !o.parseError)
     .map((o, i) => {
-      const { id, deleted, parseError, position, ...rest } = o;
-      return Object.assign({ position: i + 1 }, rest);
+      const { id, deleted, parseError, position, oppName, ...rest } = o;
+      return Object.assign({ position: i + 1, oppName: oppName || '' }, rest);
     });
 }
 
@@ -63,7 +63,6 @@ CRM_DB.exportToXlsx = function() {
   for (const o of s.opportunities) {
     if (o.amount == null) o.amount = o.amountTaxIncluded || 0;
     if (o.amountNet == null) o.amountNet = o.amountRmbEquivalent || 0;
-    if (o.oppName == null) o.oppName = o.customer || '';
   }
   return CRM_XLSX.buildXlsxFromState(s);
 };

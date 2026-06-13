@@ -68,6 +68,7 @@
   function makeOpportunity(partial) {
     return Object.assign({
       id: (global.crypto && global.crypto.randomUUID) ? global.crypto.randomUUID() : ('id-' + Date.now() + '-' + Math.random().toString(36).slice(2)),
+      oppName: '',
       team: '', owner: '', customer: '',
       productLine: '', product: '', salesChannel: '',
       stage: 'ST1 线索(Leads)',
@@ -98,9 +99,6 @@
     }
     if (typeof opp.amount !== 'number' || isNaN(opp.amount) || opp.amount < 0 || opp.amount > 1e15) {
       errs.push({ field: 'amount', message: '含税金额 0~1e15' });
-    }
-    if (typeof opp.amountNet !== 'number' || isNaN(opp.amountNet) || opp.amountNet < 0 || opp.amountNet > 1e15) {
-      errs.push({ field: 'amountNet', message: '不含税金额 0~1e15' });
     }
     if (opp.note && opp.note.length > 500) errs.push({ field: 'note', message: '备注 ≤500 字符' });
     return errs;
