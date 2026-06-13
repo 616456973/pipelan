@@ -72,8 +72,8 @@
       setMeta('schema_version', '2');
     }
     if (getMeta('schema_version') === '2') {
-      // v2 → v3: ensure dict_kpi_amounts (and any other future dicts) exist for existing DBs
-      // ensureAllDictTables() above already handles this; just bump version
+      // v2 → v3: ensure any new dict tables exist for existing DBs.
+      // ensureAllDictTables() above already handles this; just bump version.
       setMeta('schema_version', '3');
     }
   }
@@ -90,7 +90,6 @@
     db.run(`CREATE TABLE IF NOT EXISTS dict_owners (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS dict_customers (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS dict_sales_channels (value TEXT PRIMARY KEY);`);
-    db.run(`CREATE TABLE IF NOT EXISTS dict_kpi_amounts (value TEXT PRIMARY KEY);`);
   }
 
   function applyV1Schema() {
@@ -104,7 +103,6 @@
     db.run(`CREATE TABLE IF NOT EXISTS dict_owners (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS dict_customers (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS dict_sales_channels (value TEXT PRIMARY KEY);`);
-    db.run(`CREATE TABLE IF NOT EXISTS dict_kpi_amounts (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS oportunidades (
       id TEXT PRIMARY KEY,
       opp_name TEXT,
@@ -260,8 +258,8 @@
   }
 
   // ---- CRUD: Dictionaries ----
-  const DICT_TABLES = ['dict_teams', 'dict_product_lines', 'dict_products', 'dict_stages', 'dict_currencies', 'dict_lose_reasons', 'dict_owners', 'dict_customers', 'dict_sales_channels', 'dict_kpi_amounts'];
-  const DICT_KEYS = { dict_teams: 'teams', dict_product_lines: 'productLines', dict_products: 'products', dict_stages: 'stages', dict_currencies: 'currencies', dict_lose_reasons: 'loseReasons', dict_owners: 'owners', dict_customers: 'customers', dict_sales_channels: 'salesChannels', dict_kpi_amounts: 'kpiAmounts' };
+  const DICT_TABLES = ['dict_teams', 'dict_product_lines', 'dict_products', 'dict_stages', 'dict_currencies', 'dict_lose_reasons', 'dict_owners', 'dict_customers', 'dict_sales_channels'];
+  const DICT_KEYS = { dict_teams: 'teams', dict_product_lines: 'productLines', dict_products: 'products', dict_stages: 'stages', dict_currencies: 'currencies', dict_lose_reasons: 'loseReasons', dict_owners: 'owners', dict_customers: 'customers', dict_sales_channels: 'salesChannels' };
   const DICT_TO_OPP = { dict_teams: 'team', dict_product_lines: 'product_line', dict_products: 'product', dict_stages: 'stage', dict_currencies: 'currency', dict_owners: 'owner', dict_customers: 'customer', dict_sales_channels: 'sales_channel' };
 
   function listDict(table) {

@@ -11,8 +11,7 @@
     { key: 'salesChannels', label: '销售渠道' },
     { key: 'stages', label: '阶段' },
     { key: 'currencies', label: '币种' },
-    { key: 'loseReasons', label: '丢单原因' },
-    { key: 'kpiAmounts', label: 'KPI 金额' }
+    { key: 'loseReasons', label: '丢单原因' }
   ];
   const FIELD_TO_OPP = {
     teams: 'team', owners: 'owner', customers: 'customer',
@@ -20,7 +19,6 @@
     salesChannels: 'salesChannel',
     stages: 'stage', currencies: 'currency'
     // loseReasons maps to opp.loseReason (comma-separated)
-    // kpiAmounts: dashboard-only (not tied to any opp field)
   };
 
   let currentTab = 'teams';

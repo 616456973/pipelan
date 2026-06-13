@@ -30,6 +30,10 @@
   if (typeof window.__dashSelectedStage === 'undefined') {
     window.__dashSelectedStage = 'ST4:赢单(Win)';
   }
+  // Initialize business line metric if not set
+  if (typeof window.__dashBizLineMetric === 'undefined') {
+    window.__dashBizLineMetric = '加权金额';
+  }
 
   // Initialize KPI metric if not set
   if (typeof window.__dashKpiMetric === 'undefined') {
@@ -68,9 +72,13 @@
 
   // Stage change handler — re-renders the dashboard
   window.__dashStageChange = function(newStage) {
-    window.__dashSelectedStage = newStage;
+    if (newStage === '__ALL__') {
+      window.__dashSelectedStage = '__ALL__';
+    } else {
+      window.__dashSelectedStage = newStage;
+    }
     renderDashboard();
-    Notify.info('已切换到: ' + newStage);
+    Notify.info('已切换到: ' + (newStage === '__ALL__' ? '全部' : newStage));
   };
 
   // Compute the "本年金额" total for the given metric across this year's opps
@@ -110,7 +118,6 @@
     const opps = CRM.state.opportunities;
     const k = CRM.computeKpi(opps);
     const funnel = CRM.computeFunnel(opps);
-    const topBls = CRM.computeTopN(opps, { groupBy: 'productLine', metric: 'amount', n: 6 });
 
     const content = document.getElementById('content');
     const valid = opps.filter(o => !o.deleted && !o.parseError);
@@ -169,10 +176,15 @@
       </div>
       <div class="kpi k-green" data-dash-stage>
         <div class="kpi-icon">🎯</div>
-        <div class="label">阶段商机数:${helpIcon('下拉切换阶段,实时显示该阶段的商机数')}<select id="dash-stage-select" class="kpi-stage-select" onchange="window.__dashStageChange(this.value)">
-          ${(CRM.state.dicts.stages || []).map(s => `<option value="${s}" ${s === (window.__dashSelectedStage || 'ST4:赢单(Win)') ? 'selected' : ''}>${s}</option>`).join('')}
+        <div class="label">阶段商机数:${helpIcon('下拉切换阶段,实时显示该阶段的商机数;选"全部"显示商机总数')}<select id="dash-stage-select" class="kpi-stage-select" onchange="window.__dashStageChange(this.value)">
+          <option value="__ALL__" ${(window.__dashSelectedStage === '__ALL__' || !window.__dashSelectedStage) ? 'selected' : ''}>全部</option>
+          ${(CRM.state.dicts.stages || []).map(s => `<option value="${s}" ${s === window.__dashSelectedStage ? 'selected' : ''}>${s}</option>`).join('')}
         </select></div>
-        <div class="value" id="dash-stage-count">${countByStage(window.__dashSelectedStage || 'ST4:赢单(Win)')}</div>
+        <div class="value" id="dash-stage-count">${
+          window.__dashSelectedStage === '__ALL__'
+            ? CRM.state.opportunities.filter(o => !o.deleted && !o.parseError).length
+            : countByStage(window.__dashSelectedStage || 'ST4:赢单(Win)')
+        }</div>
         <div class="sub">赢单率 ${(k.winRate * 100).toFixed(1)}% · ST5: ${k.st5} · 点数字可切换</div>
       </div>
       <div class="kpi k-purple">
@@ -196,8 +208,8 @@
         <div style="display:flex; gap:8px; align-items:center;">
           <label style="font-size:12px; color:var(--muted);">金额口径:</label>
           <select id="dash-kpi-metric" class="card-tag" style="border:1px solid var(--border); background:#fff; padding:3px 10px; cursor:pointer;">
-            ${(CRM.state.dicts.kpiAmounts || ['含税金额', '加权金额', 'ST4 赢单金额', '已开票金额', '已回款金额']).map(m =>
-              `<option value="${m}" ${m === window.__dashKpiMetric ? 'selected' : ''}>${m}</option>`
+            ${TOP_METRICS.map(m =>
+              `<option value="${m.key}" ${m.key === window.__dashKpiMetric ? 'selected' : ''}>${m.label}</option>`
             ).join('')}
           </select>
           <button class="btn" id="dash-set-target" style="padding:3px 10px; font-size:11px;">设定目标</button>
@@ -249,10 +261,12 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <h3>业务线金额占比${helpIcon('各业务线的合同金额合计,看哪条产品线是主力')}</h3>
-          <span class="card-tag">TOP ${topBls.length}</span>
+          <h3>业务线金额占比${helpIcon('按选定指标排名的业务线,看哪条产品线贡献最大')}</h3>
+          <select id="top-bizline-metric" class="card-tag" style="border:1px solid var(--border); background:#fff; padding:3px 8px; cursor:pointer; font-size:11px;">
+            ${TOP_METRICS.map(m => `<option value="${m.key}" ${m.key === window.__dashBizLineMetric ? 'selected' : ''}>${m.label}</option>`).join('')}
+          </select>
         </div>
-        ${topBarHtml(topBls, 'amount', 'productLine')}
+        ${topBarHtmlByMetric(CRM.state.opportunities, 'productLine', window.__dashBizLineMetric, 6)}
       </div>
       <div class="card">
         <div class="card-header">
@@ -322,6 +336,9 @@
     // TOP 10 owner metric change — re-render whole dashboard
     const topOwnerMetricEl = document.getElementById('top-owner-metric');
     if (topOwnerMetricEl) topOwnerMetricEl.onchange = (e) => { window.__dashTopOwnerMetric = e.target.value; renderDashboard(); };
+    // 业务线 metric change — re-render whole dashboard
+    const topBizLineMetricEl = document.getElementById('top-bizline-metric');
+    if (topBizLineMetricEl) topBizLineMetricEl.onchange = (e) => { window.__dashBizLineMetric = e.target.value; renderDashboard(); };
     // TOP 5 team metric change — re-render whole dashboard
     const topTeamMetricEl = document.getElementById('top-team-metric');
     if (topTeamMetricEl) topTeamMetricEl.onchange = (e) => { window.__dashTopTeamMetric = e.target.value; renderDashboard(); };

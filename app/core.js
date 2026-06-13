@@ -17,7 +17,7 @@
   // ---- State (DB mirror) ----
   const state = {
     opportunities: [],
-    dicts: { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [], loseReasons: [], kpiAmounts: [] },
+    dicts: { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [], loseReasons: [] },
     fileName: '',
     fileLoaded: false,
     dbEmpty: true,
@@ -58,17 +58,6 @@
     const s = getDb().loadAllToState();
     state.opportunities = s.opportunities;
     state.dicts = s.dicts;
-    // Seed default KPI amount metrics if none defined yet
-    if (!state.dicts.kpiAmounts || state.dicts.kpiAmounts.length === 0) {
-      const defaults = ['含税金额', '加权金额', 'ST4 赢单金额', '已开票金额', '已回款金额'];
-      try {
-        const db = getDb();
-        for (const v of defaults) db.addDictItem('dict_kpi_amounts', v);
-      } catch (e) {
-        // DB not initialized yet (Node tests); safe to ignore
-      }
-      state.dicts.kpiAmounts = defaults;
-    }
     syncDictsFromOpps();  // Auto-populate customer/product/salesChannel/owner from existing opps
     state.dbEmpty = state.opportunities.length === 0 &&
                     state.dicts.teams.length === 0 &&
@@ -85,7 +74,7 @@
   function reset() {
     // Reset in-memory mirror only. Does NOT touch DB. For full DB wipe, use db.clearAll.
     state.opportunities = [];
-    state.dicts = { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [], loseReasons: [], kpiAmounts: [] };
+    state.dicts = { teams: [], owners: [], customers: [], productLines: [], products: [], salesChannels: [], stages: [], currencies: [], loseReasons: [] };
     state.fileName = '';
     state.fileLoaded = false;
     state.dbEmpty = true;
@@ -340,15 +329,13 @@
     teams: 'dict_teams', owners: 'dict_owners', customers: 'dict_customers',
     productLines: 'dict_product_lines', products: 'dict_products',
     salesChannels: 'dict_sales_channels', stages: 'dict_stages',
-    currencies: 'dict_currencies', loseReasons: 'dict_lose_reasons',
-    kpiAmounts: 'dict_kpi_amounts'
+    currencies: 'dict_currencies', loseReasons: 'dict_lose_reasons'
   };
   const DICT_TO_OPP_FIELD = {
     teams: 'team', owners: 'owner', customers: 'customer',
     productLines: 'productLine', products: 'product',
     salesChannels: 'salesChannel', stages: 'stage', currencies: 'currency'
     // loseReasons: stored as comma-separated in opp.loseReason
-    // kpiAmounts: not tied to any opp field (dashboard-only)
   };
 
   function addDictValue(key, value) {

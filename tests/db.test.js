@@ -17,11 +17,11 @@ function test(name, fn) {
   console.log('db');
   const CRM_DB = require('../app/db.js');
 
-  await test('initDb (in-memory) creates 12 tables', async () => {
+  await test('initDb (in-memory) creates 11 tables', async () => {
     await CRM_DB.initDb({ forceInMemory: true });
     const tables = CRM_DB.listTables();
-    // v3.0: 6 dict tables (v1) + 3 new dict tables + kpi_amounts + oportunidades + meta = 12
-    assert.equal(tables.length, 12);
+    // v3.0: 6 dict tables (v1) + 3 new dict tables (v2) + oportunidades + meta = 11
+    assert.equal(tables.length, 11);
     assert.ok(tables.includes('oportunidades'));
     assert.ok(tables.includes('dict_teams'));
     assert.ok(tables.includes('dict_product_lines'));
@@ -32,7 +32,7 @@ function test(name, fn) {
     assert.ok(tables.includes('dict_owners'));
     assert.ok(tables.includes('dict_customers'));
     assert.ok(tables.includes('dict_sales_channels'));
-    assert.ok(tables.includes('dict_kpi_amounts'));
+    assert.ok(!tables.includes('dict_kpi_amounts'), 'dict_kpi_amounts should be removed');
     assert.ok(tables.includes('meta'));
   });
 
@@ -47,8 +47,7 @@ function test(name, fn) {
     assert.deepEqual(dicts, {
       teams: [], productLines: [], products: [],
       stages: [], currencies: [], loseReasons: [],
-      owners: [], customers: [], salesChannels: [],
-      kpiAmounts: []
+      owners: [], customers: [], salesChannels: []
     });
   });
 
@@ -347,19 +346,21 @@ function test(name, fn) {
     assert.equal(got2.productLine, 'PL2', 'productLine should be correct after upsertOpp on migrated DB');
   });
 
-  await test('runMigrations ensures all dict tables exist on existing DB (e.g. dict_kpi_amounts)', async () => {
+  await test('runMigrations ensures all dict tables exist on existing DB', async () => {
     await CRM_DB.initDb({ forceInMemory: true });
-    // Simulate old DB state: drop dict_kpi_amounts to verify migration re-creates it
-    CRM_DB._execForTest('DROP TABLE IF EXISTS dict_kpi_amounts');
+    // Simulate old DB state: drop one of the dict tables to verify migration re-creates it
+    CRM_DB._execForTest('DROP TABLE IF EXISTS dict_sales_channels');
     // Re-init (which calls runMigrations)
     await CRM_DB.initDb({ forceInMemory: true });
     // Now the table should exist again
     const tables = CRM_DB.listTables();
-    assert.ok(tables.includes('dict_kpi_amounts'), 'dict_kpi_amounts should be re-created by migration');
+    assert.ok(tables.includes('dict_sales_channels'), 'dict_sales_channels should be re-created by migration');
     // And it should be queryable
-    CRM_DB.addDictItem('dict_kpi_amounts', 'test metric');
-    const items = CRM_DB.listDict('dict_kpi_amounts');
-    assert.ok(items.includes('test metric'), 'dict_kpi_amounts should accept inserts after migration');
+    CRM_DB.addDictItem('dict_sales_channels', 'test channel');
+    const items = CRM_DB.listDict('dict_sales_channels');
+    assert.ok(items.includes('test channel'), 'dict_sales_channels should accept inserts after migration');
+    // dict_kpi_amounts should NOT exist (it was removed)
+    assert.ok(!tables.includes('dict_kpi_amounts'), 'dict_kpi_amounts should not be re-created after removal');
   });
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
