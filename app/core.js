@@ -127,8 +127,8 @@
     const amountByCurrency = {};
     const weightedByCurrency = {};
     for (const o of valid) {
-      amountByCurrency[o.currency] = (amountByCurrency[o.currency] || 0) + o.amount;
-      weightedByCurrency[o.currency] = (weightedByCurrency[o.currency] || 0) + (o.amount * o.winRate);
+      amountByCurrency[o.currency] = (amountByCurrency[o.currency] || 0) + (o.amountTaxIncluded || 0);
+      weightedByCurrency[o.currency] = (weightedByCurrency[o.currency] || 0) + ((o.amountTaxIncluded || 0) * (o.winRate || 0));
     }
     const st4 = valid.filter(o => o.stage === stages.find(s => s.startsWith('ST4'))).length;
     const st5 = valid.filter(o => o.stage === stages.find(s => s.startsWith('ST5'))).length;
@@ -141,8 +141,8 @@
     const stages = getStageList();
     return stages.map(stage => {
       const inStage = valid.filter(o => o.stage === stage);
-      const amount = inStage.reduce((s, o) => s + o.amount, 0);
-      const weighted = inStage.reduce((s, o) => s + o.amount * o.winRate, 0);
+      const amount = inStage.reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+      const weighted = inStage.reduce((s, o) => s + (o.amountTaxIncluded || 0) * (o.winRate || 0), 0);
       return { stage, count: inStage.length, amount, weighted };
     });
   }
@@ -173,8 +173,8 @@
       const key = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
       if (!buckets[key]) buckets[key] = { month: key, count: 0, amount: 0, weighted: 0 };
       buckets[key].count++;
-      buckets[key].amount += o.amount;
-      buckets[key].weighted += o.amount * o.winRate;
+      buckets[key].amount += (o.amountTaxIncluded || 0);
+      buckets[key].weighted += (o.amountTaxIncluded || 0) * (o.winRate || 0);
     }
     return Object.values(buckets).sort((a, b) => a.month < b.month ? -1 : 1);
   }
@@ -186,8 +186,8 @@
       const key = o[opts.groupBy] || '(未分类)';
       if (!groups[key]) groups[key] = { name: key, count: 0, amount: 0, weighted: 0 };
       groups[key].count++;
-      groups[key].amount += o.amount;
-      groups[key].weighted += o.amount * o.winRate;
+      groups[key].amount += (o.amountTaxIncluded || 0);
+      groups[key].weighted += (o.amountTaxIncluded || 0) * (o.winRate || 0);
     }
     const arr = Object.values(groups);
     arr.sort((a, b) => (b[opts.metric] || 0) - (a[opts.metric] || 0));

@@ -40,9 +40,8 @@
   function filteredOpps() {
     const fs = window.CRM_FILTERS || {};
     let opps = CRM.state.opportunities;
-    if (fs.teams && fs.teams.length) opps = opps.filter(o => fs.teams.includes(o.team));
-    if (fs.productLines && fs.productLines.length) opps = opps.filter(o => fs.productLines.includes(o.productLine));
-    if (fs.products && fs.products.length) opps = opps.filter(o => fs.products.includes(o.product));
+    if (fs.customers && fs.customers.length) opps = opps.filter(o => fs.customers.includes(o.customer));
+    if (fs.owners && fs.owners.length) opps = opps.filter(o => fs.owners.includes(o.owner));
     if (fs.stages && fs.stages.length) opps = opps.filter(o => fs.stages.includes(o.stage));
     if (fs.currencies && fs.currencies.length) opps = opps.filter(o => fs.currencies.includes(o.currency));
     return opps.filter(o => !o.deleted && !o.parseError);
