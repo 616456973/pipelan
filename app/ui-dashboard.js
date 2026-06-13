@@ -37,6 +37,35 @@
   }
   // (KPI target is now read live from CRM.getKpiTarget() in yearKpiHtml and the setTarget handler — no caching)
 
+  // Initialize trend chart X-axis (dimension) and metric
+  if (typeof window.__dashTrendX === 'undefined') window.__dashTrendX = 'month';
+  if (typeof window.__dashTrendMetric === 'undefined') window.__dashTrendMetric = '加权金额';
+  // Initialize TOP 10 owner / TOP 5 team metric selectors
+  if (typeof window.__dashTopOwnerMetric === 'undefined') window.__dashTopOwnerMetric = '加权金额';
+  if (typeof window.__dashTopTeamMetric === 'undefined') window.__dashTopTeamMetric = '加权金额';
+
+  const TREND_AXES = [
+    { key: 'month', label: '月' },
+    { key: 'team', label: '团队' },
+    { key: 'owner', label: '负责人' },
+    { key: 'customer', label: '客户' },
+    { key: 'product', label: '产品' }
+  ];
+  const TREND_METRICS = [
+    { key: '加权金额', label: '加权金额' },
+    { key: '含税金额', label: '含税金额' },
+    { key: 'ST4 赢单金额', label: 'ST4 赢单' },
+    { key: '已开票金额', label: '已开票' },
+    { key: '已回款金额', label: '已回款' }
+  ];
+  const TOP_METRICS = [
+    { key: '加权金额', label: '加权金额' },
+    { key: '含税金额', label: '含税金额' },
+    { key: 'ST4 赢单金额', label: 'ST4 赢单' },
+    { key: '已开票金额', label: '已开票' },
+    { key: '已回款金额', label: '已回款' }
+  ];
+
   // Stage change handler — re-renders the dashboard
   window.__dashStageChange = function(newStage) {
     window.__dashSelectedStage = newStage;
@@ -81,10 +110,7 @@
     const opps = CRM.state.opportunities;
     const k = CRM.computeKpi(opps);
     const funnel = CRM.computeFunnel(opps);
-    const topTeams = CRM.computeTopN(opps, { groupBy: 'team', metric: 'amount', n: 5 });
-    const topOwners = CRM.computeTopN(opps, { groupBy: 'owner', metric: 'weighted', n: 10 });
     const topBls = CRM.computeTopN(opps, { groupBy: 'productLine', metric: 'amount', n: 6 });
-    const trend = CRM.computeTrend(opps);
 
     const content = document.getElementById('content');
     const valid = opps.filter(o => !o.deleted && !o.parseError);
@@ -209,10 +235,17 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <h3>月度加权趋势${helpIcon('按月聚合的加权金额走势,看未来能到多少钱')}</h3>
-          <span class="card-tag">${trend.length} 个月</span>
+          <h3>月度业绩趋势${helpIcon('按选定维度(月/团队/负责人/客户)聚合,展示选定指标走势。点击栏可下钻')}</h3>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <select id="trend-x" class="card-tag" style="border:1px solid var(--border); background:#fff; padding:3px 8px; cursor:pointer; font-size:11px;">
+              ${TREND_AXES.map(a => `<option value="${a.key}" ${a.key === window.__dashTrendX ? 'selected' : ''}>${a.label}</option>`).join('')}
+            </select>
+            <select id="trend-metric" class="card-tag" style="border:1px solid var(--border); background:#fff; padding:3px 8px; cursor:pointer; font-size:11px;">
+              ${TREND_METRICS.map(m => `<option value="${m.key}" ${m.key === window.__dashTrendMetric ? 'selected' : ''}>${m.label}</option>`).join('')}
+            </select>
+          </div>
         </div>
-        ${trendBarsHtml(trend)}
+        ${trendHtml(CRM.state.opportunities)}
       </div>
       <div class="card">
         <div class="card-header">
@@ -223,20 +256,24 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <h3>销售代表业绩 (TOP 10)${helpIcon('按加权金额排名的前 10 位负责人')}</h3>
-          <span class="card-tag">按加权金额</span>
+          <h3>销售代表业绩 (TOP 10)${helpIcon('按选定指标排名的前 10 位负责人')}</h3>
+          <select id="top-owner-metric" class="card-tag" style="border:1px solid var(--border); background:#fff; padding:3px 8px; cursor:pointer; font-size:11px;">
+            ${TOP_METRICS.map(m => `<option value="${m.key}" ${m.key === window.__dashTopOwnerMetric ? 'selected' : ''}>${m.label}</option>`).join('')}
+          </select>
         </div>
-        ${topBarHtml(topOwners, 'weighted', 'owner')}
+        ${topBarHtmlByMetric(CRM.state.opportunities, 'owner', window.__dashTopOwnerMetric, 10)}
       </div>
     </div>
 
     <!-- Bottom: TOP 5 teams full width -->
     <div class="card dash-bottom">
       <div class="card-header">
-        <h3>团队业绩 TOP 5${helpIcon('按金额排名的前 5 个销售团队')}</h3>
-        <span class="card-tag">按金额</span>
+        <h3>团队业绩 TOP 5${helpIcon('按选定指标排名的前 5 个销售团队')}</h3>
+        <select id="top-team-metric" class="card-tag" style="border:1px solid var(--border); background:#fff; padding:3px 8px; cursor:pointer; font-size:11px;">
+          ${TOP_METRICS.map(m => `<option value="${m.key}" ${m.key === window.__dashTopTeamMetric ? 'selected' : ''}>${m.label}</option>`).join('')}
+        </select>
       </div>
-      ${topBarHtml(topTeams, 'amount', 'team')}
+      ${topBarHtmlByMetric(CRM.state.opportunities, 'team', window.__dashTopTeamMetric, 5)}
     </div>
   `;
     // Wire up click handlers for all [data-nav] elements
@@ -275,6 +312,19 @@
       }
       Notify.info('已切换 KPI 金额口径: ' + e.target.value);
     };
+
+    // Trend chart X-axis (dimension) change — re-render whole dashboard
+    const trendXEl = document.getElementById('trend-x');
+    if (trendXEl) trendXEl.onchange = (e) => { window.__dashTrendX = e.target.value; renderDashboard(); };
+    // Trend chart metric change — re-render whole dashboard
+    const trendMetricEl = document.getElementById('trend-metric');
+    if (trendMetricEl) trendMetricEl.onchange = (e) => { window.__dashTrendMetric = e.target.value; renderDashboard(); };
+    // TOP 10 owner metric change — re-render whole dashboard
+    const topOwnerMetricEl = document.getElementById('top-owner-metric');
+    if (topOwnerMetricEl) topOwnerMetricEl.onchange = (e) => { window.__dashTopOwnerMetric = e.target.value; renderDashboard(); };
+    // TOP 5 team metric change — re-render whole dashboard
+    const topTeamMetricEl = document.getElementById('top-team-metric');
+    if (topTeamMetricEl) topTeamMetricEl.onchange = (e) => { window.__dashTopTeamMetric = e.target.value; renderDashboard(); };
 
     // Set target button — prompt for a number (in 万元), persist to DB (in 元), re-render
     const setTargetBtn = document.getElementById('dash-set-target');
@@ -322,34 +372,110 @@
     }).join('');
   }
 
-  function trendBarsHtml(trend) {
-    if (!trend.length) return '<p class="muted">无日期数据</p>';
-    const max = Math.max(1, ...trend.map(t => t.weighted));
-    // Determine current year-month
-    const now = new Date();
-    const currentYM = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-    return `
-    <div style="display:flex; align-items:flex-end; gap:4px; height:160px; border-bottom:1px solid var(--border);">
-      ${trend.map(t => {
-        const isPast = t.month < currentYM;
-        const isCurrent = t.month === currentYM;
-        const isFuture = t.month > currentYM;
-        const bg = isCurrent
-          ? 'linear-gradient(180deg, #f59e0b, #fbbf24)'  // current: orange highlight
-          : isPast
-            ? 'linear-gradient(180deg, #cbd5e0, #e2e8f0)'  // past: gray
-            : 'linear-gradient(180deg, var(--primary), var(--accent))';  // future: default
-        const heightPct = Math.max(2, (t.weighted / max) * 100);
-        return `<div class="trend-bar ${isCurrent ? 'trend-current' : ''} ${isPast ? 'trend-past' : ''}" style="flex:1; background:${bg}; height:${heightPct}%; min-height:2px; position:relative;" title="${t.month}: ${Math.round(t.weighted).toLocaleString()}${isCurrent ? ' (当前月)' : ''}${isPast ? ' (已过去)' : ' (未来)'}"></div>`;
-      }).join('')}
-    </div>
-    <div style="display:flex; gap:4px; font-size:10px; color:var(--muted); margin-top:4px;">
-      ${trend.map(t => {
-        const isCurrent = t.month === currentYM;
-        return `<div style="flex:1; text-align:center; ${isCurrent ? 'color:var(--primary); font-weight:600;' : ''}">${t.month.slice(5)}${isCurrent ? ' ●' : ''}</div>`;
-      }).join('')}
-    </div>
-  `;
+  // Compute a "time bucket" key for an opp based on trend axis
+  function trendBucketKey(o, axis) {
+    if (axis === 'month') {
+      if (!o.expectedDate || isNaN(Number(o.expectedDate))) return null;
+      const d = new Date((Number(o.expectedDate) - 25569) * 86400 * 1000);
+      if (isNaN(d.getTime())) return null;
+      return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+    }
+    // team / owner / customer / product / productLine
+    return o[axis] || '(未分类)';
+  }
+
+  // Get the metric value for an opp based on metric name
+  function trendMetricValue(o, metric) {
+    const amt = o.amountTaxIncluded || 0;
+    switch (metric) {
+      case '含税金额': return amt;
+      case '加权金额': return amt * (o.winRate || 0);
+      case 'ST4 赢单金额':
+        return (o.stage && o.stage.indexOf('ST4') >= 0) ? amt : 0;
+      case '已开票金额':
+        return (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款') ? amt : 0;
+      case '已回款金额':
+        return (o.invoiceStatus === '已回款') ? amt : 0;
+      default: return amt;
+    }
+  }
+
+  // Aggregate opps into trend buckets
+  function aggregateTrend(opps, axis, metric) {
+    const buckets = {};
+    for (const o of opps) {
+      if (o.deleted || o.parseError) continue;
+      const key = trendBucketKey(o, axis);
+      if (!key) continue;
+      if (!buckets[key]) buckets[key] = { name: key, count: 0, value: 0 };
+      buckets[key].count++;
+      buckets[key].value += trendMetricValue(o, metric);
+    }
+    const arr = Object.values(buckets);
+    // Sort: month → ascending, otherwise descending by value
+    if (axis === 'month') {
+      arr.sort((a, b) => a.name < b.name ? -1 : 1);
+    } else {
+      arr.sort((a, b) => b.value - a.value);
+    }
+    return arr;
+  }
+
+  function trendHtml(opps) {
+    const axis = window.__dashTrendX;
+    const metric = window.__dashTrendMetric;
+    const buckets = aggregateTrend(opps, axis, metric);
+    if (!buckets.length) return '<p class="muted">无数据</p>';
+    const max = Math.max(1, ...buckets.map(b => b.value));
+    if (axis === 'month') {
+      // Vertical bars
+      const currentYM = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+      return `
+        <div style="display:flex; align-items:flex-end; gap:4px; height:160px; border-bottom:1px solid var(--border);">
+          ${buckets.map(b => {
+            const isPast = b.name < currentYM;
+            const isCurrent = b.name === currentYM;
+            const bg = isCurrent
+              ? 'linear-gradient(180deg, #f59e0b, #fbbf24)'
+              : isPast
+                ? 'linear-gradient(180deg, #cbd5e0, #e2e8f0)'
+                : 'linear-gradient(180deg, var(--primary), var(--accent))';
+            const heightPct = Math.max(2, (b.value / max) * 100);
+            return `<div class="trend-bar ${isCurrent ? 'trend-current' : ''} ${isPast ? 'trend-past' : ''}" style="flex:1; background:${bg}; height:${heightPct}%; min-height:2px; position:relative;" title="${b.name}: ¥${Math.round(b.value).toLocaleString()} (${b.count}条)${isCurrent ? ' (当前月)' : ''}${isPast ? ' (已过去)' : ''}"></div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex; gap:4px; font-size:10px; color:var(--muted); margin-top:6px;">
+          ${buckets.map(b => {
+            const isCurrent = b.name === currentYM;
+            return `<div style="flex:1; text-align:center; ${isCurrent ? 'color:var(--primary); font-weight:600;' : ''}">${b.name.slice(5)}${isCurrent ? ' ●' : ''}</div>`;
+          }).join('')}
+        </div>
+        <div style="margin-top:10px; font-size:12px; color:var(--text-2); display:flex; justify-content:space-between;">
+          <span>合计 ¥${(buckets.reduce((s,b)=>s+b.value,0)/10000).toLocaleString(undefined,{maximumFractionDigits:1})} 万</span>
+          <span>${buckets.length} 个月</span>
+        </div>
+      `;
+    } else {
+      // Horizontal bars (group mode)
+      const axisDef = TREND_AXES.find(a => a.key === axis) || { label: axis };
+      return `
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          ${buckets.slice(0, 10).map(b => `
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:120px; font-size:12px; text-align:right; color:var(--text-2); flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${b.name}">${b.name}</div>
+              <div style="flex:1; height:20px; background:var(--surface-2); border-radius:4px; overflow:hidden;">
+                <div style="background:linear-gradient(90deg,var(--primary),var(--accent)); height:100%; width:${(b.value/max*100)}%; border-radius:4px;"></div>
+              </div>
+              <div style="width:100px; font-size:12px; text-align:right; font-variant-numeric:tabular-nums; flex-shrink:0;">¥${(b.value/10000).toLocaleString(undefined,{maximumFractionDigits:1})} 万</div>
+            </div>
+          `).join('')}
+        </div>
+        <div style="margin-top:10px; font-size:12px; color:var(--text-2); display:flex; justify-content:space-between;">
+          <span>合计 ¥${(buckets.reduce((s,b)=>s+b.value,0)/10000).toLocaleString(undefined,{maximumFractionDigits:1})} 万</span>
+          <span>${buckets.length} 个${axisDef.label}</span>
+        </div>
+      `;
+    }
   }
 
   // Build the overdue-opportunities table for the alert card
@@ -445,6 +571,52 @@
           <div style="background:#2563eb; height:100%; width:${w}%; border-radius:4px;"></div>
         </div>
         <div style="width:80px; font-size:12px;">${i[metric].toLocaleString()}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Aggregate opps by groupBy field and render TOP-N bar list, ranking by the chosen metric
+  function topBarHtmlByMetric(opps, groupBy, metric, n) {
+    const groups = {};
+    for (const o of opps) {
+      if (o.deleted || o.parseError) continue;
+      const k = o[groupBy] || '(未填)';
+      if (!groups[k]) {
+        groups[k] = {
+          name: k, count: 0,
+          amount: 0,
+          weighted: 0,
+          '含税金额': 0,
+          '加权金额': 0,
+          'ST4 赢单金额': 0,
+          '已开票金额': 0,
+          '已回款金额': 0
+        };
+      }
+      const amt = o.amountTaxIncluded || 0;
+      groups[k].count++;
+      groups[k].amount += amt;
+      groups[k].weighted += amt * (o.winRate || 0);
+      groups[k]['含税金额'] += amt;
+      groups[k]['加权金额'] += amt * (o.winRate || 0);
+      if (o.stage && o.stage.indexOf('ST4') >= 0) groups[k]['ST4 赢单金额'] += amt;
+      if (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款') groups[k]['已开票金额'] += amt;
+      if (o.invoiceStatus === '已回款') groups[k]['已回款金额'] += amt;
+    }
+    const arr = Object.values(groups).sort((a, b) => (b[metric] || 0) - (a[metric] || 0)).slice(0, n);
+    if (!arr.length) return '<p class="muted">（无数据）</p>';
+    const max = Math.max(1, ...arr.map(i => i[metric] || 0));
+    return arr.map((i, idx) => {
+      const v = i[metric] || 0;
+      const w = (v / max) * 100;
+      const nav = groupBy ? `data-nav='list|${groupBy}|${(i.name || '').replace(/'/g, "\\'")}'` : '';
+      return `<div ${nav} style="display:flex; align-items:center; gap:8px; margin:4px 0; padding:4px; border-radius:4px; cursor:pointer;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'" title="点击筛选 ${groupBy || ''} = ${i.name} 的商机">
+        <div style="width:32px; font-size:11px; color:var(--muted); text-align:right;">${idx + 1}</div>
+        <div style="width:120px; font-size:12px; text-align:right; color:var(--text-2); flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${i.name}">${i.name}</div>
+        <div style="flex:1; background:var(--surface-2); border-radius:4px; height:18px; overflow:hidden;">
+          <div style="background:linear-gradient(90deg,var(--primary),var(--accent)); height:100%; width:${w}%; border-radius:4px;"></div>
+        </div>
+        <div style="width:100px; font-size:12px; text-align:right; font-variant-numeric:tabular-nums; flex-shrink:0;">¥${(v/10000).toLocaleString(undefined,{maximumFractionDigits:1})} 万</div>
       </div>`;
     }).join('');
   }
