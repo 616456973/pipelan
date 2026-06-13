@@ -4,7 +4,7 @@
 
   // Module-level filter state, shared with analysis page.
   const filterState = {
-    teams: [], productLines: [], products: [], stages: [], currencies: [],
+    customers: [], owners: [], stages: [], currencies: [],
     search: '',
     showDeleted: false
   };
@@ -18,18 +18,16 @@
   }
 
   function renderFilters() {
-    const teams = uniqueValues('team');
-    const pls = uniqueValues('productLine');
-    const prods = uniqueValues('product');
+    const customers = uniqueValues('customer');
+    const owners = uniqueValues('owner');
     const stages = uniqueValues('stage');
     const currs = uniqueValues('currency');
     return `
       <div class="filters">
-        <label>团队 <select multiple size="1" id="f-team">${teams.map(t => `<option value="${t}" ${filterState.teams.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-        <label>产品线 <select multiple size="1" id="f-pl">${pls.map(t => `<option value="${t}" ${filterState.productLines.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-        <label>产品 <select multiple size="1" id="f-prod">${prods.map(t => `<option value="${t}" ${filterState.products.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>客户 <select multiple size="1" id="f-customer">${customers.map(t => `<option value="${t}" ${filterState.customers.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>负责人 <select multiple size="1" id="f-owner">${owners.map(t => `<option value="${t}" ${filterState.owners.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>阶段 <select multiple size="1" id="f-stage">${stages.map(t => `<option value="${t}" ${filterState.stages.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-        <label>币种 <select multiple size="1" id="f-cur">${currs.map(t => `<option value="${t}" ${filterState.currencies.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>币种 <select multiple size="1" id="f-currency">${currs.map(t => `<option value="${t}" ${filterState.currencies.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>搜索 <input id="f-search" value="${filterState.search}" placeholder="商机/客户"></label>
         <label><input type="checkbox" id="f-del" ${filterState.showDeleted ? 'checked' : ''}> 显示已删除</label>
         <button class="btn" id="f-clear">清空</button>
@@ -41,14 +39,13 @@
     return opps.filter(o => {
       if (!filterState.showDeleted && o.deleted) return false;
       if (filterState.showDeleted && !o.deleted) return false;
-      if (filterState.teams.length && !filterState.teams.includes(o.team)) return false;
-      if (filterState.productLines.length && !filterState.productLines.includes(o.productLine)) return false;
-      if (filterState.products.length && !filterState.products.includes(o.product)) return false;
+      if (filterState.customers.length && !filterState.customers.includes(o.customer)) return false;
+      if (filterState.owners.length && !filterState.owners.includes(o.owner)) return false;
       if (filterState.stages.length && !filterState.stages.includes(o.stage)) return false;
       if (filterState.currencies.length && !filterState.currencies.includes(o.currency)) return false;
       if (filterState.search) {
         const s = filterState.search.toLowerCase();
-        if (!o.oppName.toLowerCase().includes(s) && !o.customer.toLowerCase().includes(s)) return false;
+        if (!(o.oppName || '').toLowerCase().includes(s) && !(o.customer || '').toLowerCase().includes(s)) return false;
       }
       return true;
     });
@@ -75,7 +72,7 @@
   }
 
   function attachFilterHandlers() {
-    const ids = { team: 'teams', pl: 'productLines', prod: 'products', stage: 'stages', cur: 'currencies' };
+    const ids = { customer: 'customers', owner: 'owners', stage: 'stages', currency: 'currencies' };
     for (const [elId, key] of Object.entries(ids)) {
       const el = document.getElementById('f-' + elId);
       if (!el) continue;
