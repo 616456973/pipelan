@@ -43,7 +43,7 @@
     if (fs.customers && fs.customers.length) opps = opps.filter(o => fs.customers.includes(o.customer));
     if (fs.owners && fs.owners.length) opps = opps.filter(o => fs.owners.includes(o.owner));
     if (fs.stages && fs.stages.length) opps = opps.filter(o => fs.stages.includes(o.stage));
-    if (fs.currencies && fs.currencies.length) opps = opps.filter(o => fs.currencies.includes(o.currency));
+    if (fs.invoiceStatuses && fs.invoiceStatuses.length) opps = opps.filter(o => fs.invoiceStatuses.includes(o.invoiceStatus));
     return opps.filter(o => !o.deleted && !o.parseError);
   }
 

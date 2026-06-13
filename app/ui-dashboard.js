@@ -174,7 +174,7 @@
         if (tab === 'list' && fieldOrSpecial && fieldOrSpecial.startsWith('ST')) {
           // Stage filter
           setFilterAndSwitch('list', { stages: [fieldOrSpecial] });
-          Notify.info('已筛选: 阶段 = ' + fieldOrSpecial);
+          Notify.info('已筛选: 阶段 = ' + (fieldOrSpecial.length > 20 ? fieldOrSpecial.substring(0, 20) + '...' : fieldOrSpecial));
         } else if (tab === 'list' && fieldOrSpecial) {
           // Other field filter (owner/customer/etc.)
           setFilterAndSwitch('list', { [fieldOrSpecial]: parts[2] ? [parts[2]] : [] });
@@ -197,7 +197,7 @@
       const stCode = m ? 'ST' + m[1] : 'st' + (i + 1);
       const stClass = m ? 'st' + m[1] : 'st-other';
       const widthPct = Math.max(2, (f.count / maxCount) * 100);
-      const nav = m ? `data-nav='list|ST${m[1]}'` : '';
+      const nav = `data-nav='list|${(f.stage || '').replace(/'/g, "\\'")}'`;
       return `<div class="funnel-row" ${nav} title="点击筛选 ${f.stage} 的商机">
       <div class="funnel-label">${f.stage}</div>
       <div class="funnel-bar-wrap">

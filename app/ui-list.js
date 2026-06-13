@@ -4,7 +4,7 @@
 
   // Module-level filter state, shared with analysis page.
   const filterState = {
-    customers: [], owners: [], stages: [], currencies: [],
+    customers: [], owners: [], stages: [], invoiceStatuses: [],
     search: '',
     showDeleted: false,
     dateFrom: '',
@@ -16,6 +16,8 @@
 
   // Row-level edit state. null = no row in edit mode; otherwise the opp.id being edited.
   let editingId = null;
+
+  const STAGE_DEFAULT_WINRATE = { 'ST1': 0.1, 'ST2': 0.3, 'ST3': 0.5, 'ST4': 1, 'ST5': 0 };
 
   function uniqueValues(field) {
     const set = new Set();
@@ -56,29 +58,37 @@
     if (!serial) return '';
     const n = Number(serial);
     if (isNaN(n) || n <= 0) return '';
+    // Use Date.UTC to be explicit — Excel's epoch is 1900-01-00 in local convention
+    // but we use the standard 1970-01-01 + 25569 offset for 1900 system
     const d = new Date((n - 25569) * 86400 * 1000);
     if (isNaN(d.getTime())) return '';
-    return d.toISOString().slice(0, 10);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   function excelDateToSerial(dateStr) {
     if (!dateStr) return null;
-    const d = new Date(dateStr + 'T00:00:00Z');
-    if (isNaN(d.getTime())) return null;
-    return Math.round((d.getTime() / 86400000) + 25569);
+    // Parse YYYY-MM-DD and use Date.UTC to avoid timezone interpretation
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (!m) return null;
+    const [, y, mo, d] = m;
+    const utcMs = Date.UTC(Number(y), Number(mo) - 1, Number(d));
+    return Math.round(utcMs / 86400000) + 25569;
   }
 
   function renderFilters() {
     const customers = uniqueValues('customer');
     const owners = uniqueValues('owner');
     const stages = uniqueValues('stage');
-    const currs = uniqueValues('currency');
+    const invStatuses = uniqueValues('invoiceStatus');
     return `
       <div class="filters">
         <label>客户 <select multiple size="1" id="f-customer">${customers.map(t => `<option value="${t}" ${filterState.customers.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>负责人 <select multiple size="1" id="f-owner">${owners.map(t => `<option value="${t}" ${filterState.owners.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>阶段 <select multiple size="1" id="f-stage">${stages.map(t => `<option value="${t}" ${filterState.stages.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-        <label>币种 <select multiple size="1" id="f-currency">${currs.map(t => `<option value="${t}" ${filterState.currencies.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>发票状态 <select multiple size="1" id="f-invoiceStatus">${invStatuses.map(t => `<option value="${t}" ${filterState.invoiceStatuses.includes(t) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>预计落单从 <input type="date" id="f-date-from" value="${filterState.dateFrom}"></label>
         <label>到 <input type="date" id="f-date-to" value="${filterState.dateTo}"></label>
         <label>搜索 <input id="f-search" value="${filterState.search}" placeholder="商机/客户"></label>
@@ -95,7 +105,7 @@
       if (filterState.customers.length && !filterState.customers.includes(o.customer)) return false;
       if (filterState.owners.length && !filterState.owners.includes(o.owner)) return false;
       if (filterState.stages.length && !filterState.stages.includes(o.stage)) return false;
-      if (filterState.currencies.length && !filterState.currencies.includes(o.currency)) return false;
+      if (filterState.invoiceStatuses.length && !filterState.invoiceStatuses.includes(o.invoiceStatus)) return false;
       // Date range filter (预计落单时间)
       if (filterState.dateFrom || filterState.dateTo) {
         if (!o.expectedDate) return false;
@@ -156,7 +166,9 @@
           ? `<select id="ed-invoiceStatus-${safeId}" class="cell-edit"><option value="">—</option>${['未开发票', '已开票', '合同中', '已回款', '已预付'].map(s => `<option value="${s}" ${s === o.invoiceStatus ? 'selected' : ''}>${s}</option>`).join('')}</select>`
           : `<span class="tag inv-${invCode(o.invoiceStatus)}">${o.invoiceStatus || ''}</span>`}</td>
         <td class="num">${(o.amountTaxIncluded || 0).toLocaleString()}</td>
-        <td>${Math.round((o.winRate || 0) * 100)}%</td>
+        <td>${isEditing
+          ? `<input type="number" id="ed-winRate-${safeId}" class="cell-edit" step="0.01" min="0" max="1" value="${o.winRate || 0}" style="width:60px;">`
+          : `${Math.round((o.winRate || 0) * 100)}%`}</td>
         <td>${isEditing
           ? `<input type="date" id="ed-expectedDate-${safeId}" class="cell-edit" value="${serialToDateStr(o.expectedDate)}">`
           : serialToDateStr(o.expectedDate)}</td>
@@ -168,7 +180,7 @@
   }
 
   function attachFilterHandlers() {
-    const ids = { customer: 'customers', owner: 'owners', stage: 'stages', currency: 'currencies' };
+    const ids = { customer: 'customers', owner: 'owners', stage: 'stages', invoiceStatus: 'invoiceStatuses' };
     for (const [elId, key] of Object.entries(ids)) {
       const el = document.getElementById('f-' + elId);
       if (!el) continue;
@@ -259,6 +271,21 @@
       </div>
     `;
     attachFilterHandlers();
+    // Wire up stage change → auto-update win rate
+    content.querySelectorAll('[id^="ed-stage-"]').forEach(sel => {
+      sel.onchange = (e) => {
+        const stage = e.target.value || '';
+        const m = stage.toUpperCase().match(/ST\s*([1-9])/);
+        if (m) {
+          const key = 'ST' + m[1];
+          if (STAGE_DEFAULT_WINRATE[key] !== undefined) {
+            const id = e.target.id.replace('ed-stage-', 'ed-winRate-');
+            const wrEl = document.getElementById(id);
+            if (wrEl) wrEl.value = STAGE_DEFAULT_WINRATE[key];
+          }
+        }
+      };
+    });
     // Wire up sortable headers + show indicator on the active sort column
     content.querySelectorAll('th.sortable').forEach(th => {
       th.onclick = () => {
@@ -300,21 +327,24 @@
     const oldStage = opp.stage;
     const oldInvoice = opp.invoiceStatus;
     const oldExpected = opp.expectedDate;
-    // Read values from the 3 selects + date input
+    const oldWinRate = opp.winRate;
     const ownerEl = document.getElementById('ed-owner-' + id);
     const stageEl = document.getElementById('ed-stage-' + id);
     const invEl = document.getElementById('ed-invoiceStatus-' + id);
     const dateEl = document.getElementById('ed-expectedDate-' + id);
-    if (!stageEl) return;  // row not in edit mode
+    const wrEl = document.getElementById('ed-winRate-' + id);
+    if (!stageEl) return;
     opp.owner = ownerEl ? ownerEl.value : '';
     opp.stage = stageEl.value;
     opp.invoiceStatus = invEl ? invEl.value : '';
+    if (wrEl && wrEl.value !== '') {
+      opp.winRate = parseFloat(wrEl.value) || 0;
+    }
     if (dateEl && dateEl.value) {
       opp.expectedDate = excelDateToSerial(dateEl.value);
     } else {
       opp.expectedDate = null;
     }
-    // Persist
     try { CRM_DB.upsertOpp(opp); } catch (e) { console.error('save failed', e); Notify.error('保存失败: ' + e.message); }
     editingId = null;
     renderList();
@@ -323,6 +353,7 @@
     if (oldStage !== opp.stage) changes.push('阶段');
     if (oldInvoice !== opp.invoiceStatus) changes.push('发票状态');
     if (oldExpected !== opp.expectedDate) changes.push('预计落单');
+    if (oldWinRate !== opp.winRate) changes.push('赢率');
     Notify.info('已保存' + (changes.length ? ': ' + changes.join('/') : ' (无变化)'));
   };
 

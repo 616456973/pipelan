@@ -7,16 +7,25 @@
 
   function excelDateToSerial(dateStr) {
     // dateStr in 'YYYY-MM-DD' format → Excel serial
-    const d = new Date(dateStr + 'T00:00:00Z');
-    if (isNaN(d.getTime())) return null;
-    return Math.round((d.getTime() / 86400000) + 25569);
+    // Use Date.UTC to avoid timezone interpretation
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (!m) return null;
+    const [, y, mo, d] = m;
+    const utcMs = Date.UTC(Number(y), Number(mo) - 1, Number(d));
+    return Math.round(utcMs / 86400000) + 25569;
   }
 
   function serialToExcelDate(serial) {
     if (!serial) return '';
-    const d = new Date((Number(serial) - 25569) * 86400 * 1000);
+    const n = Number(serial);
+    if (isNaN(n) || n <= 0) return '';
+    const d = new Date((n - 25569) * 86400 * 1000);
     if (isNaN(d.getTime())) return '';
-    return d.toISOString().slice(0, 10);
+    // Use getUTC* methods for timezone-safe formatting
+    const y = d.getUTCFullYear();
+    const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const da = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${mo}-${da}`;
   }
 
   let editingId = null;  // null = new mode; otherwise editing existing opp.id
