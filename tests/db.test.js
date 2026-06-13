@@ -161,6 +161,64 @@ function test(name, fn) {
     assert.ok(bytes.length > 100, 'backup is non-trivial size');
   });
 
+  await test('schema v2 includes 3 new dict tables (owners, customers, salesChannels)', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    const tables = CRM_DB.listTables();
+    assert.ok(tables.includes('dict_owners'), 'missing dict_owners');
+    assert.ok(tables.includes('dict_customers'), 'missing dict_customers');
+    assert.ok(tables.includes('dict_sales_channels'), 'missing dict_sales_channels');
+    assert.ok(!tables.includes('dict_invoice_status'), 'invoice_status should NOT be a DB table (built-in enum)');
+  });
+
+  await test('opportunities schema includes 5 new columns (salesChannel, invoiceStatus, amountRmbEquivalent, dictRefs, owner, customer)', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.clearAll();
+    const opp = {
+      id: 'o1', team: 'T', owner: 'Alice', customer: 'AcmeCo', productLine: 'PL1', product: 'P110',
+      salesChannel: '字节跳动', stage: 'ST4 赢单(Win)', invoiceStatus: '已开票',
+      currency: 'USD', amountTaxIncluded: 1000, amountRmbEquivalent: 7200,
+      winRate: 0.7, expectedDate: 46023, note: 'n', loseReason: '', dictRefs: '{"team":"T"}',
+      deleted: false, parseError: null, position: 1
+    };
+    CRM_DB.upsertOpp(opp);
+    const got = CRM_DB.getOpp('o1');
+    assert.equal(got.owner, 'Alice');
+    assert.equal(got.customer, 'AcmeCo');
+    assert.equal(got.salesChannel, '字节跳动');
+    assert.equal(got.invoiceStatus, '已开票');
+    assert.equal(got.amountTaxIncluded, 1000);
+    assert.equal(got.amountRmbEquivalent, 7200);
+    assert.equal(got.dictRefs, '{"team":"T"}');
+  });
+
+  await test('listDict supports 3 new dict tables', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.addDictItem('dict_owners', '张晶晶');
+    CRM_DB.addDictItem('dict_customers', '智元创新(上海)');
+    CRM_DB.addDictItem('dict_sales_channels', '字节跳动');
+    assert.deepEqual(CRM_DB.listDict('dict_owners'), ['张晶晶']);
+    assert.deepEqual(CRM_DB.listDict('dict_customers'), ['智元创新(上海)']);
+    assert.deepEqual(CRM_DB.listDict('dict_sales_channels'), ['字节跳动']);
+  });
+
+  await test('countDictRefs works for new dict tables', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.addDictItem('dict_owners', 'Alice');
+    CRM_DB.addDictItem('dict_customers', 'AcmeCo');
+    CRM_DB.addDictItem('dict_sales_channels', '直签');
+    CRM_DB.upsertOpp({
+      id: 'o1', team: '', owner: 'Alice', customer: 'AcmeCo', productLine: '', product: '',
+      salesChannel: '直签', stage: 'ST4 赢单(Win)', invoiceStatus: '',
+      currency: 'USD', amountTaxIncluded: 0, amountRmbEquivalent: 0,
+      winRate: 0, expectedDate: null, note: '', loseReason: '', dictRefs: null,
+      deleted: false, parseError: null, position: 1
+    });
+    assert.equal(CRM_DB.countDictRefs('dict_owners', 'Alice'), 1);
+    assert.equal(CRM_DB.countDictRefs('dict_customers', 'AcmeCo'), 1);
+    assert.equal(CRM_DB.countDictRefs('dict_sales_channels', '直签'), 1);
+    assert.equal(CRM_DB.countDictRefs('dict_owners', 'Bob'), 0);
+  });
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed > 0 ? 1 : 0);
 })();

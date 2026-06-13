@@ -68,11 +68,17 @@
     db.run(`CREATE TABLE IF NOT EXISTS dict_stages (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS dict_currencies (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS dict_lose_reasons (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_owners (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_customers (value TEXT PRIMARY KEY);`);
+    db.run(`CREATE TABLE IF NOT EXISTS dict_sales_channels (value TEXT PRIMARY KEY);`);
     db.run(`CREATE TABLE IF NOT EXISTS oportunidades (
-      id TEXT PRIMARY KEY, team TEXT, owner TEXT, opp_name TEXT, customer TEXT,
-      product_line TEXT, product TEXT, currency TEXT, stage TEXT,
-      win_rate REAL, amount REAL, amount_net REAL,
+      id TEXT PRIMARY KEY,
+      team TEXT, owner TEXT, customer TEXT,
+      product_line TEXT, product TEXT, sales_channel TEXT,
+      stage TEXT, invoice_status TEXT, currency TEXT,
+      win_rate REAL, amount_tax_included REAL, amount_rmb_equivalent REAL,
       expected_date REAL, note TEXT, lose_reason TEXT,
+      dict_refs TEXT,
       deleted INTEGER DEFAULT 0, parse_error TEXT, position INTEGER
     );`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_opp_team ON oportunidades(team);`);
@@ -145,19 +151,22 @@
   function rowToOpp(row) {
     return {
       id: row[0], team: row[1] || '', owner: row[2] || '',
-      oppName: row[3] || '', customer: row[4] || '',
-      productLine: row[5] || '', product: row[6] || '',
-      currency: row[7] || '', stage: row[8] || '',
-      winRate: row[9] == null ? 0 : row[9],
-      amount: row[10] == null ? 0 : row[10],
-      amountNet: row[11] == null ? 0 : row[11],
-      expectedDate: row[12], note: row[13] || '', loseReason: row[14] || '',
-      deleted: !!row[15], parseError: row[16] || null,
-      position: row[17] || 0
+      customer: row[3] || '',
+      productLine: row[4] || '', product: row[5] || '',
+      salesChannel: row[6] || '', stage: row[7] || '',
+      invoiceStatus: row[8] || '',
+      currency: row[9] || '',
+      winRate: row[10] == null ? 0 : row[10],
+      amountTaxIncluded: row[11] == null ? 0 : row[11],
+      amountRmbEquivalent: row[12] == null ? 0 : row[12],
+      expectedDate: row[13], note: row[14] || '', loseReason: row[15] || '',
+      dictRefs: row[16] || null,
+      deleted: !!row[17], parseError: row[18] || null,
+      position: row[19] || 0
     };
   }
 
-  const COLS = 'id, team, owner, opp_name, customer, product_line, product, currency, stage, win_rate, amount, amount_net, expected_date, note, lose_reason, deleted, parse_error, position';
+  const COLS = 'id, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, dict_refs, deleted, parse_error, position';
 
   function listOpps(opts) {
     opts = opts || {};
@@ -182,13 +191,14 @@
 
   function upsertOpp(opp) {
     const params = [
-      opp.id, opp.team, opp.owner, opp.oppName, opp.customer,
-      opp.productLine, opp.product, opp.currency, opp.stage,
-      opp.winRate, opp.amount, opp.amountNet,
-      opp.expectedDate, opp.note, opp.loseReason,
+      opp.id, opp.team, opp.owner, opp.customer,
+      opp.productLine, opp.product, opp.salesChannel, opp.stage,
+      opp.invoiceStatus, opp.currency,
+      opp.winRate, opp.amountTaxIncluded, opp.amountRmbEquivalent,
+      opp.expectedDate, opp.note, opp.loseReason, opp.dictRefs,
       opp.deleted ? 1 : 0, opp.parseError, opp.position || 0
     ];
-    const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
+    const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
     db.run('INSERT OR REPLACE INTO oportunidades VALUES (' + placeholders + ')', params);
     scheduleSave();
   }
@@ -204,9 +214,9 @@
   }
 
   // ---- CRUD: Dictionaries ----
-  const DICT_TABLES = ['dict_teams', 'dict_product_lines', 'dict_products', 'dict_stages', 'dict_currencies', 'dict_lose_reasons'];
-  const DICT_KEYS = { dict_teams: 'teams', dict_product_lines: 'productLines', dict_products: 'products', dict_stages: 'stages', dict_currencies: 'currencies', dict_lose_reasons: 'loseReasons' };
-  const DICT_TO_OPP = { dict_teams: 'team', dict_product_lines: 'productLine', dict_products: 'product', dict_stages: 'stage', dict_currencies: 'currency' };
+  const DICT_TABLES = ['dict_teams', 'dict_product_lines', 'dict_products', 'dict_stages', 'dict_currencies', 'dict_lose_reasons', 'dict_owners', 'dict_customers', 'dict_sales_channels'];
+  const DICT_KEYS = { dict_teams: 'teams', dict_product_lines: 'productLines', dict_products: 'products', dict_stages: 'stages', dict_currencies: 'currencies', dict_lose_reasons: 'loseReasons', dict_owners: 'owners', dict_customers: 'customers', dict_sales_channels: 'salesChannels' };
+  const DICT_TO_OPP = { dict_teams: 'team', dict_product_lines: 'product_line', dict_products: 'product', dict_stages: 'stage', dict_currencies: 'currency', dict_owners: 'owner', dict_customers: 'customer', dict_sales_channels: 'sales_channel' };
 
   function listDict(table) {
     if (!DICT_TABLES.includes(table)) throw new Error('Invalid dict table: ' + table);
