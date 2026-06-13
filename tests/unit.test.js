@@ -225,23 +225,24 @@ await test('exportXlsxBlob strips cell styles (Excel renders numbers correctly)'
   const X = require('../vendor/sheetjs/xlsx.full.min.js');
   const wb = X.read(out, { type: 'array' });
   const ws = wb.Sheets['Sheet1'];
-  // Find a numeric cell in the data (M18 = 预估合同金额（含税）). After stripStyles, s.numFmtId should be 0
+  // Find a numeric cell in the data (M2 = 预估合同金额（含税）). After stripStyles, s.numFmtId should be 0
   // so Excel uses General format and renders the number.
-  const cell = ws['M18'];
-  assert.ok(cell, 'M18 should exist');
+  // Note: xlsx export now starts at row 1 (no empty preamble rows), so first data row is row 2.
+  const cell = ws['M2'];
+  assert.ok(cell, 'M2 should exist');
   assert.equal(cell.t, 'n', 'cell should be a number type');
   if (cell.s) {
     assert.equal(cell.s.numFmtId, 0, 'numFmtId should be 0 (General) so Excel renders numbers');
   }
   assert.equal(cell.v, 10000, 'value preserved');
-  // Also check an amount cell (N18 = 预估合同金额（RMB）auto-computed)
-  const cellN = ws['N18'];
-  assert.ok(cellN, 'N18 should exist');
-  assert.equal(cellN.t, 'n', 'N18 should be a number type');
+  // Also check an amount cell (N2 = 预估合同金额（RMB）auto-computed)
+  const cellN = ws['N2'];
+  assert.ok(cellN, 'N2 should exist');
+  assert.equal(cellN.t, 'n', 'N2 should be a number type');
   if (cellN.s) {
-    assert.equal(cellN.s.numFmtId, 0, 'N18 numFmtId should be 0');
+    assert.equal(cellN.s.numFmtId, 0, 'N2 numFmtId should be 0');
   }
-  assert.equal(cellN.v, 10000, 'N18 value preserved (auto-computed)');
+  assert.equal(cellN.v, 10000, 'N2 value preserved (auto-computed)');
 });
 
 console.log('upsertOpp');

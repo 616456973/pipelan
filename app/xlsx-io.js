@@ -360,9 +360,7 @@
       '预估合同金额（含税）', '预估合同金额（RMB）', '预计落单时间',
       '发票状态', '丢单原因'
     ];
-    const sheet1Rows = [];
-    for (let i = 0; i < 16; i++) sheet1Rows.push(new Array(headers.length).fill(''));
-    sheet1Rows.push(headers);
+    const sheet1Rows = [headers];
     let n = 1;
     for (const o of (state.opportunities || [])) {
       if (o.deleted) continue;

@@ -468,3 +468,13 @@ tr.row-editing {
 tr.row-editing td {
   background: #fef9c3;
 }
+
+/* Dashboard clickable elements */
+.kpi[data-nav], .stage[data-nav], [data-nav] {
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+.kpi[data-nav]:hover, .stage[data-nav]:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}

@@ -108,7 +108,7 @@
         <td>${o.product || ''}</td>
         <td>${isEditing
           ? `<select id="ed-stage-${safeId}" class="cell-edit">${(CRM.state.dicts.stages || []).map(v => `<option value="${v}" ${v === o.stage ? 'selected' : ''}>${v}</option>`).join('')}</select>`
-          : `<span class="tag stage-${stageCode(o.stage)}">${o.stage || ''}</span>`}</td>
+          : `<span class="tag stage-${stageCode(o.stage)}">${o.stage || ''}</span>${(o.stage && o.stage.indexOf('ST5') >= 0 && o.loseReason) ? `<div style="font-size:10px; color:var(--text-2); margin-top:2px;">${o.loseReason}</div>` : ''}`}</td>
         <td>${isEditing
           ? `<select id="ed-invoiceStatus-${safeId}" class="cell-edit"><option value="">—</option>${['未开发票', '已开票', '合同中', '已回款', '已预付'].map(s => `<option value="${s}" ${s === o.invoiceStatus ? 'selected' : ''}>${s}</option>`).join('')}</select>`
           : `<span class="tag inv-${invCode(o.invoiceStatus)}">${o.invoiceStatus || ''}</span>`}</td>
@@ -160,25 +160,28 @@
       const c = o.currency || '';
       totals.byCurrency[c] = (totals.byCurrency[c] || 0) + (o.amountTaxIncluded || 0);
     }
+    const currencyHtml = Object.entries(totals.byCurrency)
+      .map(([c, v]) => `${c} ${Math.round(v).toLocaleString()}`)
+      .join(' / ') || '-';
     content.innerHTML = `
       <h2>商机列表 (${filtered.length} / ${CRM.state.opportunities.length})</h2>
       ${renderFilters()}
       <div class="card">
         <table>
           <colgroup>
-            <col style="width:48px">       <!-- # -->
-            <col style="width:100px">      <!-- 团队 -->
-            <col style="width:84px">       <!-- 负责人 -->
+            <col style="width:40px">       <!-- # -->
+            <col style="width:80px">       <!-- 团队 -->
+            <col style="width:80px">       <!-- 负责人 -->
             <col>                          <!-- 商机 (auto-expand) -->
             <col>                          <!-- 客户 (auto-expand) -->
-            <col style="width:130px">      <!-- 业务线 -->
-            <col style="width:120px">      <!-- 产品 -->
-            <col style="width:80px">       <!-- 阶段 -->
+            <col style="width:110px">      <!-- 业务线 -->
+            <col style="width:100px">      <!-- 产品 -->
+            <col style="width:90px">       <!-- 阶段 -->
             <col style="width:80px">       <!-- 发票状态 -->
-            <col style="width:110px">      <!-- 含税金额 -->
-            <col style="width:64px">       <!-- 赢率 -->
-            <col style="width:96px">       <!-- 预计落单时间 -->
-            <col style="width:64px">       <!-- 操作 -->
+            <col style="width:100px">      <!-- 含税金额 -->
+            <col style="width:56px">       <!-- 赢率 -->
+            <col style="width:92px">       <!-- 预计落单 -->
+            <col style="width:100px">      <!-- 操作 (2 buttons) -->
           </colgroup>
           <thead><tr>
             <th>#</th><th>团队</th><th>负责人</th><th>商机</th><th>客户</th>
@@ -190,8 +193,8 @@
           <tfoot>
             <tr>
               <td colspan="10" style="text-align:right;"><b>合计</b> (共 ${totals.count} 条)</td>
-              <td class="num" title="按币种: ${Object.entries(totals.byCurrency).map(([c,v])=>c+':'+Math.round(v).toLocaleString()).join(' / ')}">
-                <b>${Object.keys(totals.byCurrency).map(c => c).join('/') || '-'}</b>
+              <td class="num" title="按币种明细: ${Object.entries(totals.byCurrency).map(([c,v])=>c+' '+Math.round(v).toLocaleString()).join(' / ')}">
+                <b>${currencyHtml}</b>
               </td>
               <td colspan="2"></td>
             </tr>

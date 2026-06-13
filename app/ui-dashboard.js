@@ -2,6 +2,18 @@
 (function (global) {
   'use strict';
 
+  // Navigate to a tab with an optional filter preset
+  function setFilterAndSwitch(tab, filterPatch) {
+    const fs = window.CRM_FILTERS;
+    if (fs && filterPatch) {
+      for (const [k, v] of Object.entries(filterPatch)) {
+        fs[k] = v;
+      }
+    }
+    const btn = document.querySelector(`.tab[data-tab="${tab}"]`);
+    if (btn) btn.click();
+  }
+
   function renderDashboard() {
     const opps = CRM.state.opportunities;
     const k = CRM.computeKpi(opps);
@@ -60,25 +72,25 @@
 
     <!-- KPI cards (4 primary) -->
     <div class="kpi-grid">
-      <div class="kpi k-blue">
+      <div class="kpi k-blue" data-nav="list|" style="cursor:pointer;">
         <div class="kpi-icon">💰</div>
         <div class="label">总合同金额</div>
         <div class="value">${amountHtml}</div>
         <div class="sub">按币种: ${Object.keys(k.amountByCurrency).join(', ') || '无'}</div>
       </div>
-      <div class="kpi k-green">
+      <div class="kpi k-green" data-nav="list|ST4" style="cursor:pointer;" title="点击查看 ST4 赢单商机">
         <div class="kpi-icon">🎯</div>
         <div class="label">赢单数 (ST4)</div>
         <div class="value">${k.st4}</div>
         <div class="sub">赢单率 ${(k.winRate * 100).toFixed(1)}% · ST5: ${k.st5}</div>
       </div>
-      <div class="kpi k-purple">
+      <div class="kpi k-purple" data-nav="analysis|weighted" style="cursor:pointer;">
         <div class="kpi-icon">📊</div>
         <div class="label">加权金额</div>
         <div class="value">${fmtMoney(totalAmount > 0 ? totalAmount * avgWinRate : 0)}</div>
         <div class="sub">按平均赢率 ${(avgWinRate * 100).toFixed(0)}% 估算</div>
       </div>
-      <div class="kpi k-orange">
+      <div class="kpi k-orange" data-nav="analysis|customer" style="cursor:pointer;">
         <div class="kpi-icon">👥</div>
         <div class="label">活跃客户</div>
         <div class="value">${activeCustomers}</div>
@@ -107,14 +119,14 @@
           <h3>业务线金额占比</h3>
           <span class="card-tag">TOP ${topBls.length}</span>
         </div>
-        ${topBarHtml(topBls, 'amount')}
+        ${topBarHtml(topBls, 'amount', 'productLine')}
       </div>
       <div class="card">
         <div class="card-header">
           <h3>销售代表业绩 (TOP 10)</h3>
           <span class="card-tag">按加权金额</span>
         </div>
-        ${topBarHtml(topOwners, 'weighted')}
+        ${topBarHtml(topOwners, 'weighted', 'owner')}
       </div>
     </div>
 
@@ -124,18 +136,43 @@
         <h3>团队业绩 TOP 5</h3>
         <span class="card-tag">按金额</span>
       </div>
-      ${topBarHtml(topTeams, 'amount')}
+      ${topBarHtml(topTeams, 'amount', 'team')}
     </div>
   `;
+    // Wire up click handlers for all [data-nav] elements
+    content.querySelectorAll('[data-nav]').forEach(el => {
+      el.onclick = () => {
+        const parts = el.dataset.nav.split('|');
+        const tab = parts[0];
+        const fieldOrSpecial = parts[1];
+        if (tab === 'list' && fieldOrSpecial && fieldOrSpecial.startsWith('ST')) {
+          // Stage filter
+          setFilterAndSwitch('list', { stages: [fieldOrSpecial] });
+          Notify.info('已筛选: 阶段 = ' + fieldOrSpecial);
+        } else if (tab === 'list' && fieldOrSpecial) {
+          // Other field filter (owner/customer/etc.)
+          setFilterAndSwitch('list', { [fieldOrSpecial]: parts[2] ? [parts[2]] : [] });
+          const label = { owner: '负责人', customer: '客户', productLine: '业务线', product: '产品', team: '团队' }[fieldOrSpecial] || fieldOrSpecial;
+          Notify.info('已筛选: ' + label + ' = ' + (parts[2] || '全部'));
+        } else {
+          // No filter, just switch tab
+          setFilterAndSwitch(tab, null);
+        }
+      };
+    });
   }
 
   function funnelHtml(funnel) {
     const max = Math.max(1, ...funnel.map(f => f.amount));
     return funnel.map(f => {
       const widthPct = (f.amount / max) * 100;
-      return `<div class="stage" style="width:${Math.max(20, widthPct)}%;">
+      // Extract ST code from stage label like "ST1:线索(Leads)"
+      const m = (f.stage || '').toUpperCase().match(/ST\s*([1-9])/);
+      const stCode = m ? 'ST' + m[1] : '';
+      const nav = stCode ? `data-nav='list|${stCode}'` : '';
+      return `<div class="stage" ${nav} style="width:${Math.max(20, widthPct)}%;" title="点击筛选 ${f.stage} 的商机">
         <span class="name">${f.stage}</span>
-        <span class="meta">${f.count} 条 / ${f.amount.toLocaleString()}</span>
+        <span class="meta">${f.count} 条 / ${f.amount.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
       </div>`;
     }).join('');
   }
@@ -153,12 +190,13 @@
   `;
   }
 
-  function topBarHtml(items, metric) {
+  function topBarHtml(items, metric, groupBy) {
     if (!items.length) return '<p class="muted">（无数据）</p>';
     const max = Math.max(1, ...items.map(i => i[metric]));
     return items.map(i => {
       const w = (i[metric] / max) * 100;
-      return `<div style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+      const nav = groupBy ? `data-nav='list|${groupBy}|${(i.name || '').replace(/'/g, "\\'")}'` : '';
+      return `<div ${nav} style="display:flex; align-items:center; gap:8px; margin:4px 0; padding:4px; border-radius:4px; cursor:pointer;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'" title="点击筛选 ${groupBy || ''} = ${i.name} 的商机">
         <div style="width:140px; font-size:12px; text-align:right;">${i.name}</div>
         <div style="flex:1; background:#e3e8ef; border-radius:4px; height:20px; position:relative;">
           <div style="background:#2563eb; height:100%; width:${w}%; border-radius:4px;"></div>
