@@ -347,7 +347,7 @@
       '业务线', '业务线产品', '销售渠道', '阶段', '发票状态',
       '币种', '赢单概率',
       '预估合同金额（含税）', '预估合同金额（RMB）', '预计落单时间',
-      '自由备注', '丢单原因'
+      '发票状态', '丢单原因'
     ];
     const sheet1Rows = [];
     for (let i = 0; i < 16; i++) sheet1Rows.push(new Array(headers.length).fill(''));
@@ -361,7 +361,7 @@
         o.productLine, o.product, o.salesChannel || '', o.stage, o.invoiceStatus || '',
         o.currency, o.winRate,
         o.amountTaxIncluded, o.amountRmbEquivalent, o.expectedDate === null ? '' : o.expectedDate,
-        o.note || '', o.loseReason || ''
+        o.invoiceStatus || '', o.loseReason || ''
       ]);
     }
     const ws1 = X.utils.aoa_to_sheet(sheet1Rows);
