@@ -137,6 +137,14 @@
     saveTimer = setTimeout(saveToIndexedDb, 500);
   }
 
+  async function flushSave() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    await saveToIndexedDb();
+  }
+
   async function saveToIndexedDb() {
     if (typeof indexedDB === 'undefined') return;
     try {
@@ -370,7 +378,7 @@
     listTables, clearAll,
     importFromXlsx, exportToXlsx,
     exportBackup, importBackup,
-    scheduleSave,
+    scheduleSave, flushSave,
     getMeta, setMeta,
     _execForTest: (sql) => db.exec(sql),
     _setDbForTest

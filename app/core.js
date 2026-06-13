@@ -424,9 +424,11 @@
     return v ? parseFloat(String(v)) || 0 : 0;
   }
 
-  function setKpiTarget(value) {
+  async function setKpiTarget(value) {
     const num = Number(value) || 0;
     getDb().setMeta('kpi_target', String(num));
+    // Force immediate flush to IndexedDB so quick refreshes don't lose data
+    try { await getDb().flushSave(); } catch (e) { console.warn('flushSave failed', e); }
     return num;
   }
 

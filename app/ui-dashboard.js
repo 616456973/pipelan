@@ -31,18 +31,11 @@
     window.__dashSelectedStage = 'ST4:赢单(Win)';
   }
 
-  // Initialize KPI metric / target defaults for the 本年 KPI section
+  // Initialize KPI metric if not set
   if (typeof window.__dashKpiMetric === 'undefined') {
-    window.__dashKpiMetric = '含税金额';
+    window.__dashKpiMetric = '已开票金额';  // default metric
   }
-  // Read persisted target from DB (default 0 if not set)
-  if (typeof window.__dashKpiTarget === 'undefined') {
-    try {
-      window.__dashKpiTarget = (typeof CRM !== 'undefined' && CRM.getKpiTarget) ? CRM.getKpiTarget() : 0;
-    } catch (e) {
-      window.__dashKpiTarget = 0;
-    }
-  }
+  // (KPI target is now read live from CRM.getKpiTarget() in yearKpiHtml and the setTarget handler — no caching)
 
   // Stage change handler — re-renders the dashboard
   window.__dashStageChange = function(newStage) {
@@ -286,7 +279,7 @@
     // Set target button — prompt for a number (in 万元), persist to DB (in 元), re-render
     const setTargetBtn = document.getElementById('dash-set-target');
     if (setTargetBtn) setTargetBtn.onclick = () => {
-      const cur = window.__dashKpiTarget || '';
+      const cur = (typeof CRM !== 'undefined' && CRM.getKpiTarget) ? CRM.getKpiTarget() : 0;
       // Prompt in 万元, store in 元
       const v = prompt('设定本年度目标 (万元):', cur ? (cur / 10000).toString() : '');
       if (v === null) return;
@@ -297,7 +290,6 @@
       }
       // Store in 元 internally
       const numYuan = numWan * 10000;
-      window.__dashKpiTarget = numYuan;
       // Persist to DB
       if (typeof CRM !== 'undefined' && CRM.setKpiTarget) {
         CRM.setKpiTarget(numYuan);
@@ -413,7 +405,7 @@
     });
     const thisYearCount = thisYearOpps.length;
     const actual = computeYearAmount(CRM.state.opportunities, window.__dashKpiMetric);
-    const target = window.__dashKpiTarget || 0;  // stored in 元
+    const target = (typeof CRM !== 'undefined' && CRM.getKpiTarget) ? CRM.getKpiTarget() : 0;  // stored in 元
     const pct = target > 0 ? (actual / target * 100) : null;
     const pctClass = pct == null ? '' : pct >= 100 ? 'kpi-pct-good' : pct >= 70 ? 'kpi-pct-ok' : 'kpi-pct-low';
     // Display target in 万元 (divide by 10000)
