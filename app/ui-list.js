@@ -174,7 +174,7 @@
           : serialToDateStr(o.expectedDate)}</td>
         <td>${isEditing
           ? `<button class="btn btn-primary" onclick="window.__saveRow('${safeId}')">保存</button> <button class="btn" onclick="window.__cancelEdit()">取消</button>`
-          : (o.deleted ? '已删除' : `<button class="btn" onclick="window.__startEdit('${safeId}')">编辑</button> <button class="btn btn-danger" onclick="deleteOpp('${safeId}')">删除</button>`)}</td>
+          : (o.deleted ? `<button class="btn btn-primary" onclick="restoreOpp('${safeId}')" style="font-size:11px; padding:3px 8px;">恢复</button>` : `<button class="btn" onclick="window.__startEdit('${safeId}')">编辑</button> <button class="btn btn-danger" onclick="deleteOpp('${safeId}')">删除</button>`)}</td>
       </tr>
     `;
   }
@@ -315,6 +315,17 @@
     Notify.info('已删除: ' + o.oppName);
   }
 
+  function restoreOpp(id) {
+    const o = CRM.state.opportunities.find(x => x.id === id);
+    if (!o) return;
+    if (!confirm(`确定恢复商机 "${o.oppName}"？\n恢复后该商机将重新出现在正常列表中。`)) return;
+    o.deleted = false;
+    // Persist
+    try { CRM_DB.upsertOpp(o); } catch (e) { console.error('restore failed', e); Notify.error('恢复失败: ' + e.message); }
+    renderList();
+    Notify.info('已恢复: ' + o.oppName);
+  }
+
   window.__startEdit = function(id) {
     editingId = id;
     renderList();
@@ -364,5 +375,6 @@
 
   global.renderList = renderList;
   global.deleteOpp = deleteOpp;
+  global.restoreOpp = restoreOpp;
   global.CRM_FILTERS = filterState;
 })(window);
