@@ -1,123 +1,60 @@
-# Manual Test Checklist
+# Manual Test Checklist (v2.0)
 
-Run through this checklist before each release. Test environment: Windows + Chrome or Edge.
+Run through this checklist before each release. Test environment: Windows + Chrome or Edge (recommended), served via local HTTP for full wasm support (or `file://` works for most ops).
 
 ## Setup
 
-- [ ] Open `ras_crm.html` (double-click)
-- [ ] Verify topbar shows 5 tabs and "未打开" file info
-- [ ] Verify "保存" button click shows the toast (Task 16 replaces this with real flow)
-- [ ] Open DevTools console, no errors should appear
+- [ ] Serve via local HTTP: `cd D:\claude\RAS_CRM && python -m http.server 8000` (or just double-click ras_crm.html)
+- [ ] Open `http://localhost:8000/ras_crm.html` in Chrome/Edge
+- [ ] Verify topbar shows 5 tabs and 4 buttons (导入/导出/备份/恢复)
+- [ ] Verify DB status shows "○ 空" (or "● 已加载" if you have data from a previous session)
+- [ ] Open DevTools console, no errors should appear (ignore wasm fetch errors if served from file://)
 
-## Open File
+## Import xlsx (核心功能)
 
-- [ ] Click "打开", select `tests/fixtures/test-data.xlsx`
-- [ ] Verify file name appears in topbar
-- [ ] Verify list tab auto-switches
-- [ ] Verify 53 rows appear (50 valid + 3 malformed/dangling/bad)
+- [ ] Click "📥 导入", select `tests/fixtures/test-data.xlsx`
+- [ ] Verify DB status changes to "● 已加载"
+- [ ] Click "商机" tab: verify 53 rows appear (50 valid + 3 malformed)
 - [ ] Verify 3 rows are highlighted in red (parseError)
-- [ ] Verify 1 row shows win rate 150% with row-error style (or similar)
-- [ ] Open a fresh tab, repeat — verify second open is independent
+- [ ] Click "仪表盘" tab: verify 4 KPI cards show non-zero values
+- [ ] Click "字典" tab: switch through 6 tabs, verify items display
+- [ ] Click "分析" tab: click through 8 views, verify each renders
 
-## List & Filters
+## Smart Parsing (the v2.0 fix)
 
-- [ ] Filter by team "基础业务" — verify only matching rows show
-- [ ] Filter by 2 teams simultaneously — verify OR logic
-- [ ] Search "测试商机1" — verify only #1 row shows
-- [ ] Click "清空" — verify all rows return
-- [ ] Toggle "显示已删除" — verify no rows change (none deleted yet)
+- [ ] Click "📥 导入" again, select the real `D:\claude\RAS CRM（template） (version0529).xlsx`
+- [ ] Verify the import succeeds (the file uses column "主责销售" which v2.0 aliases to owner)
+- [ ] Open "商机" tab, verify the "负责人" column is no longer empty
+- [ ] Verify dictionaries (5 teams, 2 productLines, 6 products, 5 stages, 3 currencies) all populated
 
-## Add
+## Edit / Add / Delete
 
-- [ ] Click "新增" tab
-- [ ] Fill all required fields with valid data
-- [ ] Click 保存
-- [ ] Verify list tab auto-switches
-- [ ] Verify new row appears
-- [ ] Verify "已修改" indicator is orange
+- [ ] Click "新增" tab, fill form, save — verify new row appears
+- [ ] Edit a row, verify save
+- [ ] Soft-delete a row, verify it's hidden (toggle "显示已删除" to see)
 
-## Edit
+## Auto-save (no manual save!)
 
-- [ ] Click "编辑" on a row (need to add this button to list — if not present, use "新增" flow)
-- [ ] Change amount, click 保存
-- [ ] Verify list shows updated value
+- [ ] Make any change
+- [ ] **Close the tab and reopen** (or refresh)
+- [ ] Verify your changes are still there (IndexedDB persistence)
 
-## Delete (soft)
+## Export xlsx
 
-- [ ] Click "删除" on a row, confirm
-- [ ] Verify row disappears from list
-- [ ] Toggle "显示已删除" — verify deleted row appears with strikethrough
-- [ ] Toggle off "显示已删除" — verify deleted row disappears
-
-## Validation
-
-- [ ] Click "新增" tab
-- [ ] Try to save with empty form
-- [ ] Verify error messages on required fields
-- [ ] Verify submit was blocked
-- [ ] Fill team, leave amount negative
-- [ ] Verify amount error
-- [ ] Fill all correctly, save successfully
-
-## Cascading filter
-
-- [ ] Click "新增" tab
-- [ ] Select PL1 product line
-- [ ] Verify product dropdown only shows P1xx options
-- [ ] Switch to PL2
-- [ ] Verify product dropdown only shows P2xx options
-
-## Dictionary
-
-- [ ] Click "字典" tab
-- [ ] Switch through all 6 tabs, verify content
-- [ ] Add a new team, verify it appears
-- [ ] Try to delete a team with references — verify count dialog
-- [ ] Confirm delete, verify references become "未分类"
-- [ ] Try to add a duplicate — verify warning
-
-## Dashboard
-
-- [ ] Click "仪表盘" tab
-- [ ] Verify 4 KPI cards show non-zero values
-- [ ] Verify stage funnel renders (5 stages)
-- [ ] Verify TOP 5 teams and TOP 5 products render
-
-## Analysis
-
-- [ ] Click "分析" tab
-- [ ] Click through all 8 views, verify each renders
-- [ ] In view 4 (Pareto), verify 80% line is highlighted
-- [ ] Go to "商机" tab, apply a team filter
-- [ ] Back to "分析", verify filter is reflected
-
-## Save / Reload
-
-- [ ] Make a change (e.g. delete a row)
-- [ ] Click "保存"
-- [ ] First save: verify the style-loss warning appears, accept
-- [ ] Verify file downloads to `Downloads/ras_crm_YYYYMMDD_HHmmss.xlsx`
+- [ ] Click "📤 导出" — file downloads
 - [ ] Open downloaded file in Excel
-- [ ] Verify data is intact
-- [ ] Copy downloaded file back over the original
-- [ ] Reload `ras_crm.html`, open the (now updated) original
-- [ ] Verify changes are visible
-- [ ] Verify "已修改" indicator is NOT orange (no unsaved changes)
+- [ ] Verify amount columns display correctly (e.g., "17222.88" not blank)
+- [ ] Verify "负责人" column is populated (not empty)
+- [ ] Verify dictionaries in Sheet2 are in the 5-dict block layout
+
+## Backup / Restore
+
+- [ ] Click "💾 备份" — `.sqlite` file downloads
+- [ ] Note the file size (~50KB for 53 records)
+- [ ] Click "📂 恢复", select the backup file
+- [ ] Verify the data loads correctly
 
 ## Roundtrip
 
-- [ ] In a fresh terminal: `node tools/compare-xlsx.js --roundtrip tests/fixtures/test-data.xlsx`
+- [ ] In terminal: `node tools/compare-xlsx.js --roundtrip tests/fixtures/test-data.xlsx`
 - [ ] Expected: `MATCHED` with `exit 0`
-
-## Unsaved Changes Guard
-
-- [ ] Make a change
-- [ ] Try to close the browser tab
-- [ ] Verify browser shows "leave site?" dialog
-
-## Cross-File
-
-- [ ] Open real file `RAS CRM（template） (version0529).xlsx`
-- [ ] Verify it loads (might have different column layout — let Claude know if it doesn't)
-- [ ] Make a small change, save
-- [ ] Run `node tools/compare-xlsx.js "<original>" "<downloaded>"` to verify data preservation

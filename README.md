@@ -1,74 +1,77 @@
-# RAS CRM
+# RAS CRM (v2.0)
 
-A zero-dependency single-file HTML Web App for managing RAS CRM opportunity/sales data. The .xlsx file is the database.
-
-## Status
-
-**v1.0 release** — 2026-06-13. All 20 tasks complete. 27 unit tests + 4 compare tests pass. Verified against the user's real `RAS CRM（template） (version0529).xlsx`.
+A zero-dependency single-file HTML Web App for managing RAS CRM opportunity/sales data. Uses an in-browser SQLite database (sql.js WASM) auto-persisted to IndexedDB. Excel (.xlsx) is used only for import/export.
 
 ## Quick Start
 
-1. Double-click `ras_crm.html` to open in Chrome or Edge.
-2. Click **"打开"** and select your `.xlsx` file.
-3. Edit / add / delete records.
-4. Click **"保存"** to download the updated xlsx. **Manually copy the downloaded file back over your original** (the app can't write to disk directly from the browser).
+1. Double-click `ras_crm.html` to open in Chrome or Edge (or via local HTTP server for full functionality).
+2. First run shows an empty database with a 4-step onboarding guide.
+3. Click **"📥 导入"** and select your existing `.xlsx` file (e.g., the original `RAS CRM（template） (version0529).xlsx`). All opportunities and dictionaries are imported.
+4. Edit, add, or delete records. **All changes auto-save** to IndexedDB.
+5. Click **"📤 导出"** to download an xlsx (for Excel viewing/sharing).
+6. Click **"💾 备份"** to download a `.sqlite` backup file (full DB).
+7. Click **"📂 恢复"** to load a `.sqlite` backup file (overwrites current DB; will prompt to confirm if DB has data).
 
-## Features
+## What changed from v1.0
 
-- 5 pages: Dashboard, Opportunity List, Add/Edit Form, Analysis (8 views), Dictionary Manager
-- 8 analysis views: Stage Funnel, Trend + YoY/MoM, TOP N, Pareto, Stage Conversion, Lose Reason, Multi-dim Pivot, ST4 vs ST5
-- Soft delete with "show deleted" toggle
-- Cascading product filter (selecting PL1 limits products to P1xx)
-- Validation on form submit
-- Beforeunload guard against losing unsaved changes
+| | v1.0 (old) | v2.0 (new) |
+|---|---|---|
+| Storage | xlsx file in Downloads | SQLite in IndexedDB (auto-save) |
+| Save action | Manual "保存" button → download | None (auto-save) |
+| "数据保存到哪了" question | Yes | **Solved** (always in IndexedDB) |
+| Amount display in Excel | Sometimes blank (SheetJS bug) | Always correct (canonical schema + style strip) |
+| Owner column "主责销售" mapping | Empty (hardcoded "负责人") | Works (column name aliases) |
+| Dictionary parsing | Each column = 1 dict (rigid) | Adaptive (value-pattern + alias) |
 
-## Important Limitations
+## Architecture
 
-### Style loss
-The xlsx library used (SheetJS) does NOT preserve formatting when writing. After saving:
-- Cell styles, fonts, colors are lost
-- Merged cells are lost
-- Embedded images are lost
-- Column widths may change
-- **The data itself is preserved perfectly.**
+- `app/core.js` — Facade. State is a mirror of the DB. Pure functions (validate, compute*) unchanged.
+- `app/db.js` — SQLite data layer. Schema: 8 tables (meta, 6 dicts, opportunities). Auto-persist to IndexedDB on every commit (debounced 500ms).
+- `app/xlsx-io.js` — Smart xlsx parser/builder. Alias-aware column mapping. Adaptive dictionary extraction.
+- `app/ui-*.js` — UI modules, unchanged in interface.
+- `vendor/sqljs/` — sql.js WASM (~700KB).
+- `vendor/sheetjs/` — SheetJS (for xlsx I/O only).
 
-The first time you save, you'll get a warning dialog. After that, no more warnings.
+## Database Schema
 
-If you need to preserve the original visual layout, maintain formatting in Excel and use the Web App for data entry / analysis only.
+8 tables in SQLite:
+- `meta` (key, value) — schema version, app settings
+- `dict_teams`, `dict_product_lines`, `dict_products`, `dict_stages`, `dict_currencies`, `dict_lose_reasons` — dictionaries
+- `opportunities` (14 fields + id, deleted, parse_error, position) — main entity
 
-### No concurrent editing
-Do not open the same xlsx in two browser tabs. The app has no concurrency control and you will lose changes.
+## xlsx Smart Parsing (v2.0)
 
-### xlsx compatibility
-- Tested with Chrome and Edge (latest 2 major versions)
-- Not tested with Firefox or Safari
-- Not tested on mobile
-- The xlsx file is a standard OOXML file; you can always open it in Excel
+The xlsx importer handles real-world xlsx files with non-standard layouts:
 
-## File Layout
+**Column name aliases** (any of these will be recognized as the corresponding field):
+- `team`: 销售团队, 团队
+- `owner`: 负责人, **主责销售**, 责任人, Sales Rep, Owner, 销售负责人
+- `oppName`: 商机名称, 商机, 项目名称
+- `customer`: 客户名称, 客户, 客户公司
+- `amount`: 预计合同金额(含税), 含税金额, 合同金额, 金额
+- ... (and 8 more fields)
 
-```
-RAS_CRM\
-├── ras_crm.html              # Main entry — double-click this
-├── app\
-│   ├── core.js               # Data layer
-│   ├── ui-*.js               # UI modules
-│   └── styles.css
-├── vendor\sheetjs\           # xlsx library
-├── tests\                    # Test data and unit tests
-└── tools\compare-xlsx.js     # xlsx comparison tool
-```
+**Adaptive dictionary parsing**: doesn't assume "each column = 1 dict". Classifies by value patterns (P1xx → products, ST\d → stages, USD/SGD/RMB → currencies, PL\d → product lines).
+
+## xlsx Export Schema (v2.0)
+
+The exporter always emits a **canonical 15-column** schema. This guarantees:
+- Amount columns are always in the same position
+- No malformed number formats
+- Consistent layout for re-import
 
 ## Development
 
-### Run unit tests
-```bash
-node tests/unit.test.js
-```
-
-### Run all tests (unit + roundtrip comparison)
+### Run all tests
 ```bash
 node tests/run-all.js
+```
+
+Expected output: 29 unit + 12 db + 8 xlsx-io + 4 compare = 53 tests, plus roundtrip MATCHED.
+
+### Rebuild the test fixture
+```bash
+node tests/build-fixture.js
 ```
 
 ### Compare two xlsx files
@@ -76,19 +79,18 @@ node tests/run-all.js
 node tools/compare-xlsx.js <original.xlsx> <exported.xlsx>
 ```
 
-### Rebuild the test fixture
-```bash
-node tests/build-fixture.js
-```
+## Important Notes
 
-## Architecture
+### Single user, local only
+- Data is in your browser's IndexedDB (per-browser, per-profile)
+- No server, no sync, no multi-user
+- To share data: use "备份" (export sqlite) → share file → recipient uses "恢复"
 
-- `app/core.js` is the only file that knows about xlsx format. It uses a UMD pattern so it can be `require()`d in Node tests.
-- `app/ui-*.js` files manipulate the DOM and call core functions. No business logic.
-- The xlsx file is the single source of truth. The HTML app holds state in memory only.
+### Browser requirements
+- Tested on Chrome and Edge (latest 2 versions)
+- Requires support for: WebAssembly, IndexedDB, FileReader, Blob, URL.createObjectURL
+- wasm must be loadable — `file://` works for most operations except auto-init (use a local HTTP server like `python -m http.server` if you see "○ 空" persistently)
 
-## Backup
-
-- The xlsx file is your data. Back it up like any other file.
-- For multi-device sync: copy the xlsx to a cloud drive (OneDrive, etc.).
-- For multi-user collaboration: use different xlsx files; merge by hand.
+### Backwards compatibility
+- v1.0 xlsx files (like the original `RAS CRM（template） (version0529）.xlsx`) are still loadable via 导入
+- The smart parser handles different column names (主责销售 etc.) and adaptive dictionary layouts
