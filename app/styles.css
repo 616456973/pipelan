@@ -760,6 +760,11 @@ tr.row-changed td {
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+.year-kpi-card .year-kpi-sub {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+}
 .year-kpi-card.kpi-pct-good {
   background: linear-gradient(135deg, #ecfdf5, #d1fae5);
   border-color: #6ee7b7;

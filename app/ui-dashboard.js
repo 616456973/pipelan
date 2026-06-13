@@ -537,7 +537,7 @@
   <p class="muted" style="margin-top:8px; font-size:11px;">点行跳转商机列表(按阶段筛选)。共 ${overdue.length} 条逾期商机。</p>`;
   }
 
-  // Build the 本年 KPI grid (4 cards: count / amount / target / completion)
+  // Build the 本年 KPI grid (5 cards: this-year count / total count / amount / target / completion)
   function yearKpiHtml() {
     const thisYear = new Date().getFullYear();
     const thisYearOpps = CRM.state.opportunities.filter(o => {
@@ -547,6 +547,9 @@
       return d.getUTCFullYear() === thisYear;
     });
     const thisYearCount = thisYearOpps.length;
+    // Total non-deleted opps (matches the list view's "商机数")
+    const totalCount = CRM.state.opportunities.filter(o => !o.deleted && !o.parseError).length;
+    const currentYear = new Date().getFullYear();
     const actual = computeYearAmount(CRM.state.opportunities, window.__dashKpiMetric);
     const target = (typeof CRM !== 'undefined' && CRM.getKpiTarget) ? CRM.getKpiTarget() : 0;  // stored in 元
     const pct = target > 0 ? (actual / target * 100) : null;
@@ -556,8 +559,14 @@
     return `
     <div class="year-kpi-grid">
       <div class="year-kpi-card">
-        <div class="label">${thisYear} 年商机数</div>
+        <div class="label">${currentYear} 年商机数</div>
         <div class="value">${thisYearCount}</div>
+        <div class="year-kpi-sub">有预计落单时间</div>
+      </div>
+      <div class="year-kpi-card">
+        <div class="label">总商机数</div>
+        <div class="value">${totalCount}</div>
+        <div class="year-kpi-sub">所有非删除</div>
       </div>
       <div class="year-kpi-card">
         <div class="label">本年 ${window.__dashKpiMetric}</div>
