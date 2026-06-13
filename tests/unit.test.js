@@ -144,6 +144,37 @@ test('buildXlsx preserves dict values', () => {
   assert.deepEqual(CRM.state.dicts.teams, teamsBefore);
 });
 
+test('buildXlsx strips cell styles to ensure Excel renders numbers correctly', () => {
+  CRM.reset();
+  const buffer = fs.readFileSync(FIXTURE);
+  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
+  const out = CRM.buildXlsx();
+  // Re-parse the output to inspect what Excel would see
+  const X = require('../vendor/sheetjs/xlsx.full.min.js');
+  const wb = X.read(out, { type: 'array' });
+  const ws = wb.Sheets['Sheet1'];
+  // Find a numeric cell in the data (K18 = 含税金额) which had a currency format
+  // in the original file. After stripStyles, s should be absent or have numFmtId 0,
+  // so Excel uses General format and renders the number instead of going blank.
+  const cell = ws['K18'];
+  assert.ok(cell, 'K18 should exist');
+  assert.equal(cell.t, 'n', 'cell should be a number type');
+  // After stripStyles, s should either be absent (SheetJS default) or have numFmtId 0
+  if (cell.s) {
+    assert.equal(cell.s.numFmtId, 0, 'numFmtId should be 0 (General) so Excel renders numbers');
+  }
+  // The value should still be preserved
+  assert.equal(cell.v, 10000, 'value preserved');
+  // Also check an amount-with-decimal cell (L18 = 不含税金额)
+  const cellL = ws['L18'];
+  assert.ok(cellL, 'L18 should exist');
+  assert.equal(cellL.t, 'n', 'L18 should be a number type');
+  if (cellL.s) {
+    assert.equal(cellL.s.numFmtId, 0, 'L18 numFmtId should be 0');
+  }
+  assert.equal(cellL.v, 8849.56, 'L18 value preserved');
+});
+
 console.log('validators');
 
 test('validateOpportunity passes for complete record', () => {

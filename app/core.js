@@ -193,6 +193,7 @@
       ]);
     }
     const ws1 = X.utils.aoa_to_sheet(rows);
+    stripStyles(ws1);
     X.utils.book_append_sheet(wb, ws1, 'Sheet1');
 
     const maxDictRows = Math.max(
@@ -210,10 +211,28 @@
       ]);
     }
     const ws2 = X.utils.aoa_to_sheet(sheet2Rows);
+    stripStyles(ws2);
     X.utils.book_append_sheet(wb, ws2, 'Sheet2');
 
     const out = X.write(wb, { type: 'array', bookType: 'xlsx' });
     return new Uint8Array(out);
+  }
+
+  // Strip all style attributes from cells in a worksheet so Excel uses default General format.
+  // This avoids SheetJS emitting malformed numFmt references (like `\\¥#,##0.00`) that cause
+  // Excel to silently render cells as blank. The data (values, types) is preserved.
+  // Defined as a function declaration so it is hoisted and available to buildXlsx above.
+  function stripStyles(ws) {
+    if (!ws) return;
+    Object.keys(ws).forEach(addr => {
+      // Skip worksheet meta keys (start with !)
+      if (addr.startsWith('!')) return;
+      const cell = ws[addr];
+      if (cell && typeof cell === 'object') {
+        // Force default style (numFmtId 0 = General) so Excel renders all cells
+        cell.s = { numFmtId: 0, fontId: 0, fillId: 0, borderId: 0, xfId: 0 };
+      }
+    });
   }
 
   function validateOpportunity(opp) {
