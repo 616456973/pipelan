@@ -90,5 +90,59 @@ test('parseXlsx on empty buffer throws', () => {
   assert.throws(() => CRM.parseXlsx(Buffer.alloc(0), { fileName: 'bad.xlsx' }));
 });
 
+console.log('buildXlsx');
+
+test('buildXlsx returns a Uint8Array', () => {
+  CRM.reset();
+  const buffer = fs.readFileSync(FIXTURE);
+  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
+  const out = CRM.buildXlsx();
+  assert.ok(out instanceof Uint8Array || Buffer.isBuffer(out));
+  assert.ok(out.length > 1000, 'xlsx should be > 1KB');
+});
+
+test('buildXlsx roundtrip preserves opportunity fields', () => {
+  CRM.reset();
+  const buffer = fs.readFileSync(FIXTURE);
+  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
+  const out = CRM.buildXlsx();
+  CRM.reset();
+  CRM.parseXlsx(Buffer.from(out), { fileName: 'rt.xlsx' });
+  const after = CRM.state.opportunities.filter(o => !o.parseError).slice(0, 5);
+  CRM.reset();
+  CRM.parseXlsx(buffer, { fileName: 'orig.xlsx' });
+  const orig = CRM.state.opportunities.filter(o => !o.parseError).slice(0, 5);
+  for (let i = 0; i < orig.length; i++) {
+    assert.equal(orig[i].team, after[i].team, 'team ' + i);
+    assert.equal(orig[i].oppName, after[i].oppName, 'oppName ' + i);
+    assert.equal(orig[i].amount, after[i].amount, 'amount ' + i);
+    assert.equal(orig[i].stage, after[i].stage, 'stage ' + i);
+  }
+});
+
+test('buildXlsx excludes deleted opportunities from Sheet1', () => {
+  CRM.reset();
+  const buffer = fs.readFileSync(FIXTURE);
+  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
+  const beforeCount = CRM.state.opportunities.length;
+  const writableCount = CRM.state.opportunities.filter(o => !o.parseError).length;
+  CRM.state.opportunities[0].deleted = true;
+  const out = CRM.buildXlsx();
+  CRM.reset();
+  CRM.parseXlsx(Buffer.from(out), { fileName: 'rt.xlsx' });
+  assert.equal(CRM.state.opportunities.length, writableCount - 1, 'deleted excluded');
+});
+
+test('buildXlsx preserves dict values', () => {
+  CRM.reset();
+  const buffer = fs.readFileSync(FIXTURE);
+  CRM.parseXlsx(buffer, { fileName: 'test-data.xlsx' });
+  const teamsBefore = CRM.state.dicts.teams.slice();
+  const out = CRM.buildXlsx();
+  CRM.reset();
+  CRM.parseXlsx(Buffer.from(out), { fileName: 'rt.xlsx' });
+  assert.deepEqual(CRM.state.dicts.teams, teamsBefore);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);

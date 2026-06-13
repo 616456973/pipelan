@@ -167,7 +167,56 @@
     return { opportunities, dicts };
   }
 
-  const api = { state, reset, makeOpportunity, markModified, parseXlsx };
+  // ---- buildXlsx: write current state.opportunities + state.dicts to xlsx ----
+  function buildXlsx() {
+    const X = getXLSX();
+    const wb = X.utils.book_new();
+
+    const headers = [
+      '#', '销售团队', '负责人', '商机名称', '客户名称',
+      '业务线', '业务/产品', '币种', '阶段', '赢率',
+      '预计合同金额(含税)', '预计合同金额(不含税)', '预计成交/丢单时间', '备注',
+      '丢单原因'
+    ];
+    const rows = [];
+    for (let i = 0; i < 16; i++) rows.push(new Array(15).fill(''));
+    rows.push(headers);
+    let n = 1;
+    for (const o of state.opportunities) {
+      if (o.deleted) continue;
+      if (o.parseError) continue;
+      rows.push([
+        n++, o.team, o.owner, o.oppName, o.customer,
+        o.productLine, o.product, o.currency, o.stage, o.winRate,
+        o.amount, o.amountNet, o.expectedDate === null ? '' : o.expectedDate, o.note,
+        o.loseReason || ''
+      ]);
+    }
+    const ws1 = X.utils.aoa_to_sheet(rows);
+    X.utils.book_append_sheet(wb, ws1, 'Sheet1');
+
+    const maxDictRows = Math.max(
+      state.dicts.teams.length, state.dicts.productLines.length,
+      state.dicts.products.length, state.dicts.stages.length, state.dicts.currencies.length
+    );
+    const sheet2Rows = [['销售团队', '业务线', '业务/产品', '阶段', '币种']];
+    for (let i = 0; i < maxDictRows; i++) {
+      sheet2Rows.push([
+        state.dicts.teams[i] || '',
+        state.dicts.productLines[i] || '',
+        state.dicts.products[i] || '',
+        state.dicts.stages[i] || '',
+        state.dicts.currencies[i] || ''
+      ]);
+    }
+    const ws2 = X.utils.aoa_to_sheet(sheet2Rows);
+    X.utils.book_append_sheet(wb, ws2, 'Sheet2');
+
+    const out = X.write(wb, { type: 'array', bookType: 'xlsx' });
+    return new Uint8Array(out);
+  }
+
+  const api = { state, reset, makeOpportunity, markModified, parseXlsx, buildXlsx };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
