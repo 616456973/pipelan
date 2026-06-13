@@ -14,6 +14,30 @@
     if (btn) btn.click();
   }
 
+  // Count opportunities in a given stage (excludes deleted / parse errors)
+  function countByStage(stageLabel) {
+    if (!stageLabel) return 0;
+    const valid = CRM.state.opportunities.filter(o => !o.deleted && !o.parseError);
+    return valid.filter(o => o.stage === stageLabel).length;
+  }
+
+  // Small ⓘ icon with a tooltip explaining the metric
+  function helpIcon(text) {
+    return ` <span class="help-icon" title="${String(text).replace(/"/g, '&quot;')}">ⓘ</span>`;
+  }
+
+  // Initialize selected stage if not set
+  if (typeof window.__dashSelectedStage === 'undefined') {
+    window.__dashSelectedStage = 'ST4:赢单(Win)';
+  }
+
+  // Stage change handler — re-renders the dashboard
+  window.__dashStageChange = function(newStage) {
+    window.__dashSelectedStage = newStage;
+    renderDashboard();
+    Notify.info('已切换到: ' + newStage);
+  };
+
   function renderDashboard() {
     const opps = CRM.state.opportunities;
     const k = CRM.computeKpi(opps);
@@ -72,27 +96,29 @@
 
     <!-- KPI cards (4 primary) -->
     <div class="kpi-grid">
-      <div class="kpi k-blue" data-nav="list|" style="cursor:pointer;">
+      <div class="kpi k-blue">
         <div class="kpi-icon">💰</div>
-        <div class="label">总合同金额</div>
+        <div class="label">总合同金额${helpIcon('所有商机的合同金额合计,按币种细分')}</div>
         <div class="value">${amountHtml}</div>
         <div class="sub">按币种: ${Object.keys(k.amountByCurrency).join(', ') || '无'}</div>
       </div>
-      <div class="kpi k-green" data-nav="list|ST4" style="cursor:pointer;" title="点击查看 ST4 赢单商机">
+      <div class="kpi k-green" data-dash-stage>
         <div class="kpi-icon">🎯</div>
-        <div class="label">赢单数 (ST4)</div>
-        <div class="value">${k.st4}</div>
-        <div class="sub">赢单率 ${(k.winRate * 100).toFixed(1)}% · ST5: ${k.st5}</div>
+        <div class="label">阶段商机数:${helpIcon('下拉切换阶段,实时显示该阶段的商机数')}<select id="dash-stage-select" class="kpi-stage-select" onchange="window.__dashStageChange(this.value)">
+          ${(CRM.state.dicts.stages || []).map(s => `<option value="${s}" ${s === (window.__dashSelectedStage || 'ST4:赢单(Win)') ? 'selected' : ''}>${s}</option>`).join('')}
+        </select></div>
+        <div class="value" id="dash-stage-count">${countByStage(window.__dashSelectedStage || 'ST4:赢单(Win)')}</div>
+        <div class="sub">赢单率 ${(k.winRate * 100).toFixed(1)}% · ST5: ${k.st5} · 点数字可切换</div>
       </div>
-      <div class="kpi k-purple" data-nav="analysis|weighted" style="cursor:pointer;">
+      <div class="kpi k-purple">
         <div class="kpi-icon">📊</div>
-        <div class="label">加权金额</div>
+        <div class="label">加权金额${helpIcon('含税金额 × 赢单概率 的合计,代表"预计能拿到的钱"')}</div>
         <div class="value">${fmtMoney(totalAmount > 0 ? totalAmount * avgWinRate : 0)}</div>
         <div class="sub">按平均赢率 ${(avgWinRate * 100).toFixed(0)}% 估算</div>
       </div>
-      <div class="kpi k-orange" data-nav="analysis|customer" style="cursor:pointer;">
+      <div class="kpi k-orange">
         <div class="kpi-icon">👥</div>
-        <div class="label">活跃客户</div>
+        <div class="label">活跃客户${helpIcon('去重的客户数(同一客户多个商机算一个)')}</div>
         <div class="value">${activeCustomers}</div>
         <div class="sub">${k.oppCount > 0 ? (k.oppCount / Math.max(activeCustomers, 1)).toFixed(1) : 0} 商机/客户</div>
       </div>
@@ -102,28 +128,28 @@
     <div class="grid-2 dash-grid">
       <div class="card">
         <div class="card-header">
-          <h3>阶段漏斗</h3>
+          <h3>阶段漏斗${helpIcon('每个阶段的商机数。漏斗越往下越窄,说明转化健康')}</h3>
           <span class="card-tag">${funnel.reduce((s, f) => s + f.count, 0)} 条商机</span>
         </div>
         ${funnelHtml(funnel)}
       </div>
       <div class="card">
         <div class="card-header">
-          <h3>月度加权趋势</h3>
+          <h3>月度加权趋势${helpIcon('按月聚合的加权金额走势,看未来能到多少钱')}</h3>
           <span class="card-tag">${trend.length} 个月</span>
         </div>
         ${trendBarsHtml(trend)}
       </div>
       <div class="card">
         <div class="card-header">
-          <h3>业务线金额占比</h3>
+          <h3>业务线金额占比${helpIcon('各业务线的合同金额合计,看哪条产品线是主力')}</h3>
           <span class="card-tag">TOP ${topBls.length}</span>
         </div>
         ${topBarHtml(topBls, 'amount', 'productLine')}
       </div>
       <div class="card">
         <div class="card-header">
-          <h3>销售代表业绩 (TOP 10)</h3>
+          <h3>销售代表业绩 (TOP 10)${helpIcon('按加权金额排名的前 10 位负责人')}</h3>
           <span class="card-tag">按加权金额</span>
         </div>
         ${topBarHtml(topOwners, 'weighted', 'owner')}
@@ -133,7 +159,7 @@
     <!-- Bottom: TOP 5 teams full width -->
     <div class="card dash-bottom">
       <div class="card-header">
-        <h3>团队业绩 TOP 5</h3>
+        <h3>团队业绩 TOP 5${helpIcon('按金额排名的前 5 个销售团队')}</h3>
         <span class="card-tag">按金额</span>
       </div>
       ${topBarHtml(topTeams, 'amount', 'team')}
