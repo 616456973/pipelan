@@ -258,5 +258,54 @@ test('compute* with empty input returns zeros', () => {
   }
 });
 
+test('computeTrend groups by month from expectedDate', () => {
+  const opps = loadFixture();
+  const t = CRM.computeTrend(opps);
+  assert.ok(Array.isArray(t));
+  assert.ok(t.length > 0);
+  for (const m of t) {
+    assert.ok(m.month, 'has month label');
+    assert.equal(typeof m.count, 'number');
+    assert.equal(typeof m.amount, 'number');
+    assert.equal(typeof m.weighted, 'number');
+  }
+});
+
+test('computeTrend with no parseable dates returns empty array', () => {
+  CRM.reset();
+  const t = CRM.computeTrend([{ amount: 100, winRate: 0.5, expectedDate: null }]);
+  assert.equal(t.length, 0);
+});
+
+test('computeTopN returns top items by metric', () => {
+  const opps = loadFixture();
+  const t = CRM.computeTopN(opps, { groupBy: 'team', metric: 'amount', n: 5 });
+  assert.equal(t.length <= 5, true);
+  assert.ok(t[0].amount >= t[t.length - 1].amount, 'descending');
+});
+
+test('computePareto returns items with cumulative percent', () => {
+  const opps = loadFixture();
+  const p = CRM.computePareto(opps, { groupBy: 'customer', metric: 'amount' });
+  for (let i = 0; i < p.length; i++) {
+    assert.equal(typeof p[i].cumulativePct, 'number');
+    if (i > 0) assert.ok(p[i].cumulativePct >= p[i - 1].cumulativePct);
+  }
+});
+
+test('computeLoseReasonAgg counts loseReason tokens across ST5 opps', () => {
+  CRM.reset();
+  const opps = [
+    CRM.makeOpportunity({ stage: 'ST5 丢单(Lose)', loseReason: '价格过高,客户预算' }),
+    CRM.makeOpportunity({ stage: 'ST5 丢单(Lose)', loseReason: '价格过高' }),
+    CRM.makeOpportunity({ stage: 'ST5 丢单(Lose)', loseReason: '技术不符' })
+  ];
+  const r = CRM.computeLoseReasonAgg(opps);
+  const price = r.find(x => x.reason === '价格过高');
+  const budget = r.find(x => x.reason === '客户预算');
+  assert.equal(price.count, 2);
+  assert.equal(budget.count, 1);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);

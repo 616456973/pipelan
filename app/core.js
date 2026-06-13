@@ -294,7 +294,70 @@
     });
   }
 
-  const api = { state, reset, makeOpportunity, markModified, parseXlsx, buildXlsx, validateOpportunity, computeKpi, computeFunnel, computeStageConversion };
+  // Excel serial date -> JS Date (treating input as Windows 1900 system)
+  function excelSerialToDate(n) {
+    if (typeof n !== 'number' || isNaN(n) || n <= 0) return null;
+    // 25569 = 1970-01-01 in Excel 1900 system
+    const ms = (n - 25569) * 86400 * 1000;
+    return new Date(ms);
+  }
+
+  function computeTrend(opps) {
+    const valid = opps.filter(isCountable);
+    const buckets = {};  // 'YYYY-MM' -> { count, amount, weighted }
+    for (const o of valid) {
+      const d = excelSerialToDate(o.expectedDate);
+      if (!d || isNaN(d.getTime())) continue;
+      const key = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+      if (!buckets[key]) buckets[key] = { month: key, count: 0, amount: 0, weighted: 0 };
+      buckets[key].count++;
+      buckets[key].amount += o.amount;
+      buckets[key].weighted += o.amount * o.winRate;
+    }
+    return Object.values(buckets).sort((a, b) => a.month < b.month ? -1 : 1);
+  }
+
+  function computeTopN(opps, opts) {
+    const valid = opps.filter(isCountable);
+    const groups = {};
+    for (const o of valid) {
+      const key = o[opts.groupBy] || '(未分类)';
+      if (!groups[key]) groups[key] = { name: key, count: 0, amount: 0, weighted: 0 };
+      groups[key].count++;
+      groups[key].amount += o.amount;
+      groups[key].weighted += o.amount * o.winRate;
+    }
+    const arr = Object.values(groups);
+    arr.sort((a, b) => (b[opts.metric] || 0) - (a[opts.metric] || 0));
+    return arr.slice(0, opts.n || 10);
+  }
+
+  function computePareto(opps, opts) {
+    const top = computeTopN(opps, Object.assign({}, opts, { n: 9999 }));
+    const total = top.reduce((s, x) => s + (x[opts.metric] || 0), 0);
+    let cum = 0;
+    return top.map(item => {
+      cum += (item[opts.metric] || 0);
+      return Object.assign({}, item, { cumulativePct: total > 0 ? (cum / total) * 100 : 0 });
+    });
+  }
+
+  function computeLoseReasonAgg(opps) {
+    const valid = opps.filter(isCountable);
+    const st5Stage = getStageList().find(s => s.startsWith('ST5'));
+    const st5 = valid.filter(o => o.stage === st5Stage);
+    const counts = {};
+    for (const o of st5) {
+      if (!o.loseReason) continue;
+      for (const r of o.loseReason.split(',').map(s => s.trim()).filter(Boolean)) {
+        counts[r] = (counts[r] || 0) + 1;
+      }
+    }
+    return Object.entries(counts).map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  const api = { state, reset, makeOpportunity, markModified, parseXlsx, buildXlsx, validateOpportunity, computeKpi, computeFunnel, computeStageConversion, computeTrend, computeTopN, computePareto, computeLoseReasonAgg };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
