@@ -5,10 +5,13 @@
 //   node tools/compare-xlsx.js --roundtrip <a.xlsx>
 //   node tools/compare-xlsx.js --json <a.xlsx> <b.xlsx>
 //   node tools/compare-xlsx.js --ignore-cols=<colA,colB> <a.xlsx> <b.xlsx>
+//
+// v2.0: Uses app/db.js (CRM_DB) instead of the v1.0 CRM facade.
+// CRM.parseXlsx and CRM.buildXlsx were removed; we now go through the DB layer.
 
 const fs = require('node:fs');
 const path = require('node:path');
-const CRM = require(path.join(__dirname, '..', 'app', 'core.js'));
+const CRM_DB = require(path.join(__dirname, '..', 'app', 'db.js'));
 
 const args = process.argv.slice(2);
 const opts = { roundtrip: false, json: false, ignoreCols: [] };
@@ -20,15 +23,19 @@ for (const a of args) {
   else fileArgs.push(a);
 }
 
-function loadOpps(p) {
-  CRM.reset();
+async function loadOpps(p) {
+  // Reset DB to a clean state, then load the xlsx file via the v2.0 import flow
+  await CRM_DB.initDb({ forceInMemory: true });
   const buf = fs.readFileSync(p);
-  CRM.parseXlsx(buf, { fileName: p });
-  return CRM.state.opportunities
+  CRM_DB.importFromXlsx(buf);
+  // Normalize position to array index + 1 (position is a row index in the
+  // source xlsx and gets re-numbered across roundtrip, so strip it for
+  // logical comparison).
+  return CRM_DB.listOpps({ includeDeleted: true })
     .filter(o => !o.deleted && !o.parseError)
-    .map(o => {
-      const { id, deleted, parseError, ...rest } = o;
-      return rest;
+    .map((o, i) => {
+      const { id, deleted, parseError, position, ...rest } = o;
+      return Object.assign({ position: i + 1 }, rest);
     });
 }
 
@@ -87,20 +94,20 @@ function compare(aPath, bPath) {
   return { matched: diffs.length === 0, diffs };
 }
 
-function roundtrip(p) {
+async function roundtrip(p) {
   const tmp = path.join(path.dirname(p), '.roundtrip-tmp.xlsx');
   try {
-    CRM.reset();
-    const buf = fs.readFileSync(p);
-    CRM.parseXlsx(buf, { fileName: p });
-    const out = CRM.buildXlsx();
-    fs.writeFileSync(tmp, Buffer.from(out));
-    // Roundtrip is a logical self-consistency check: re-parse the rebuilt
-    // file and compare the resulting opportunity objects. This intentionally
+    // Roundtrip is a logical self-consistency check: parse the rebuilt file
+    // and compare the resulting opportunity objects. This intentionally
     // drops the original fixture's raw layout (header row position, extra
     // columns, parseError rows) and compares the canonicalized data model.
-    const aOpps = loadOpps(p);
-    const bOpps = loadOpps(tmp);
+    const aOpps = await loadOpps(p);
+    await CRM_DB.initDb({ forceInMemory: true });
+    const buf = fs.readFileSync(p);
+    CRM_DB.importFromXlsx(buf);
+    const out = CRM_DB.exportToXlsx();
+    fs.writeFileSync(tmp, Buffer.from(out));
+    const bOpps = await loadOpps(tmp);
     const diffs = [];
     if (aOpps.length !== bOpps.length) {
       diffs.push({ kind: 'LENGTH', a: aOpps.length, b: bOpps.length });
@@ -142,22 +149,24 @@ function formatResult(result, aPath, bPath) {
 }
 
 function main() {
-  try {
-    if (opts.roundtrip) {
-      if (fileArgs.length !== 1) { console.error('Usage: --roundtrip <file>'); process.exit(2); }
-      const r = roundtrip(fileArgs[0]);
-      console.log(formatResult(r, fileArgs[0], fileArgs[0] + ' (roundtrip)'));
-      process.exit(r.matched ? 0 : 1);
-    } else {
-      if (fileArgs.length !== 2) { console.error('Usage: <a.xlsx> <b.xlsx>'); process.exit(2); }
-      const r = compare(fileArgs[0], fileArgs[1]);
-      console.log(formatResult(r, fileArgs[0], fileArgs[1]));
-      process.exit(r.matched ? 0 : 1);
+  (async () => {
+    try {
+      if (opts.roundtrip) {
+        if (fileArgs.length !== 1) { console.error('Usage: --roundtrip <file>'); process.exit(2); }
+        const r = await roundtrip(fileArgs[0]);
+        console.log(formatResult(r, fileArgs[0], fileArgs[0] + ' (roundtrip)'));
+        process.exit(r.matched ? 0 : 1);
+      } else {
+        if (fileArgs.length !== 2) { console.error('Usage: <a.xlsx> <b.xlsx>'); process.exit(2); }
+        const r = compare(fileArgs[0], fileArgs[1]);
+        console.log(formatResult(r, fileArgs[0], fileArgs[1]));
+        process.exit(r.matched ? 0 : 1);
+      }
+    } catch (e) {
+      console.error('ERROR:', e.message);
+      process.exit(2);
     }
-  } catch (e) {
-    console.error('ERROR:', e.message);
-    process.exit(2);
-  }
+  })();
 }
 
 main();

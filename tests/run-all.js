@@ -17,6 +17,8 @@ function runStep(name, cmd, args) {
 }
 
 runStep('unit.test.js', 'node', [path.join(__dirname, 'unit.test.js')]);
+runStep('db.test.js', 'node', [path.join(__dirname, 'db.test.js')]);
+runStep('xlsx-io.test.js', 'node', [path.join(__dirname, 'xlsx-io.test.js')]);
 runStep('compare.test.js', 'node', [path.join(__dirname, 'compare.test.js')]);
 runStep('compare-xlsx roundtrip', 'node', [
   path.join(__dirname, '..', 'tools', 'compare-xlsx.js'),
