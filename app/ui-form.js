@@ -7,7 +7,7 @@
 
   const BUILTIN_INVOICE_STATUSES = ['未开发票', '已开票', '合同中', '已回款', '已预付'];
   const STAGE_DEFAULT_WINRATE = { 'ST1': 0.1, 'ST2': 0.3, 'ST3': 0.5, 'ST4': 1, 'ST5': 0 };
-  const PROJECT_STATUS_PLACEHOLDER = '项目详细情况,如客户关键人,具体销售产品/服务等';
+  const PROJECT_STATUS_PLACEHOLDER = '客户关键人,销售产品/服务等';
 
   // Module-level: which opp is being edited/created, and which mode.
   // In 'new' mode: editingId=null and we render an empty makeOpportunity().
