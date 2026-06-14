@@ -76,6 +76,15 @@
       // ensureAllDictTables() above already handles this; just bump version.
       setMeta('schema_version', '3');
     }
+    if (getMeta('schema_version') === '3') {
+      // v3 → v4: add project_status column for 项目情况 field on detail page.
+      const cols = db.exec("PRAGMA table_info(oportunidades)");
+      const hasProjectStatus = cols[0] && cols[0].values.some(c => c[1] === 'project_status');
+      if (!hasProjectStatus) {
+        db.run("ALTER TABLE oportunidades ADD COLUMN project_status TEXT DEFAULT ''");
+      }
+      setMeta('schema_version', '4');
+    }
   }
 
   // Idempotent: creates all dict tables (safe to call on any DB state).
@@ -110,7 +119,7 @@
       product_line TEXT, product TEXT, sales_channel TEXT,
       stage TEXT, invoice_status TEXT, currency TEXT,
       win_rate REAL, amount_tax_included REAL, amount_rmb_equivalent REAL,
-      expected_date REAL, note TEXT, lose_reason TEXT,
+      expected_date REAL, note TEXT, lose_reason TEXT, project_status TEXT,
       dict_refs TEXT,
       deleted INTEGER DEFAULT 0, parse_error TEXT, position INTEGER
     );`);
@@ -202,13 +211,14 @@
       amountTaxIncluded: row[12] == null ? 0 : row[12],
       amountRmbEquivalent: row[13] == null ? 0 : row[13],
       expectedDate: row[14], note: row[15] || '', loseReason: row[16] || '',
-      dictRefs: row[17] || null,
-      deleted: !!row[18], parseError: row[19] || null,
-      position: row[20] || 0
+      projectStatus: row[17] || '',
+      dictRefs: row[18] || null,
+      deleted: !!row[19], parseError: row[20] || null,
+      position: row[21] || 0
     };
   }
 
-  const COLS = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, dict_refs, deleted, parse_error, position';
+  const COLS = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, project_status, dict_refs, deleted, parse_error, position';
 
   function listOpps(opts) {
     opts = opts || {};
@@ -232,17 +242,17 @@
   }
 
   function upsertOpp(opp) {
-    const cols = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, dict_refs, deleted, parse_error, position';
+    const cols = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, project_status, dict_refs, deleted, parse_error, position';
     const params = [
       opp.id, opp.oppName || '',
       opp.team, opp.owner, opp.customer,
       opp.productLine, opp.product, opp.salesChannel, opp.stage,
       opp.invoiceStatus, opp.currency,
       opp.winRate, opp.amountTaxIncluded, opp.amountRmbEquivalent,
-      opp.expectedDate, opp.note, opp.loseReason, opp.dictRefs,
+      opp.expectedDate, opp.note, opp.loseReason, opp.projectStatus || '', opp.dictRefs,
       opp.deleted ? 1 : 0, opp.parseError, opp.position || 0
     ];
-    const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
+    const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
     db.run('INSERT OR REPLACE INTO oportunidades (' + cols + ') VALUES (' + placeholders + ')', params);
     scheduleSave();
   }

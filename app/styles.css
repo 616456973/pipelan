@@ -952,3 +952,80 @@ tr.row-changed td {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* === v3.0.2 商机详情页 === */
+
+/* Read-only form fields: distinct background, no focus ring, no edit affordance */
+.field.ro input,
+.field.ro select,
+.field.ro textarea {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+  cursor: default;
+}
+.field.ro select,
+.field.ro input[type="date"] {
+  /* Mimic disabled visual but keep value visible & selectable */
+  opacity: 0.95;
+  background-image: none;
+}
+.field.ro input:focus,
+.field.ro select:focus,
+.field.ro textarea:focus {
+  /* No focus ring in view mode — keep visual calm */
+  box-shadow: none;
+  border-color: var(--border);
+}
+.field.ro input:hover,
+.field.ro select:hover,
+.field.ro textarea:hover {
+  border-color: var(--border);
+}
+.field.ro .lose-reason-chip {
+  cursor: default;
+  pointer-events: none;  /* disable click in view mode */
+}
+.field.ro .lose-reason-chip:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+/* Empty-value muted style (for readonly fields with no value) */
+.field.ro input:placeholder-shown,
+.field.ro textarea:placeholder-shown {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Clickable row hint: subtle accent on hover */
+tr.row-clickable { cursor: pointer; }
+tr.row-clickable:hover td {
+  background: #f0f5ff !important;  /* soft blue tint */
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+tr.row-clickable:active td { background: #e0ecff !important; }
+
+/* Form action bar — distinct from card body */
+.form-actions {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.form-actions .btn-primary { margin-right: 4px; }
+.form-actions #form-back { color: var(--text-2); }
+.form-actions #form-back:hover { background: var(--surface-2); }
+
+/* Project status textarea: slightly taller for longer notes */
+#f-projectStatus { min-height: 96px; font-family: inherit; line-height: 1.6; }
+#f-projectStatus::placeholder { font-style: italic; color: var(--muted); }
+
+/* Detail tab visible state (controlled by viewOpp) */
+#tab-detail { animation: fadeIn var(--dur) var(--ease); }
+
+/* Detail page header — give title bar a slight accent */
+.card-header + .form-grid { margin-top: 4px; }

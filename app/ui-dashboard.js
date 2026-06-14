@@ -305,6 +305,13 @@
           setFilterAndSwitch('list', { [fieldOrSpecial]: parts[2] ? [parts[2]] : [] });
           const label = { owner: '负责人', customer: '客户', productLine: '业务线', product: '产品', team: '团队' }[fieldOrSpecial] || fieldOrSpecial;
           Notify.info('已筛选: ' + label + ' = ' + (parts[2] || '全部'));
+        } else if (tab === 'detail' && fieldOrSpecial) {
+          // Open detail page for the specified opp id
+          if (typeof window.viewOpp === 'function') {
+            window.viewOpp(fieldOrSpecial);
+          } else {
+            setFilterAndSwitch('detail', null);
+          }
         } else {
           // No filter, just switch tab
           setFilterAndSwitch(tab, null);
@@ -524,7 +531,7 @@
       </tr>
     </thead>
     <tbody>
-      ${top.map(x => `<tr data-nav='list|${(x.opp.stage || '').replace(/'/g, "\\'")}' style="cursor:pointer;">
+      ${top.map(x => `<tr data-nav='detail|${x.opp.id}' class="row-clickable" style="cursor:pointer;">
         <td>${x.opp.oppName || ''}</td>
         <td>${x.opp.customer || ''}</td>
         <td>${x.opp.owner || ''}</td>
@@ -534,7 +541,7 @@
       </tr>`).join('')}
     </tbody>
   </table>
-  <p class="muted" style="margin-top:8px; font-size:11px;">点行跳转商机列表(按阶段筛选)。共 ${overdue.length} 条逾期商机。</p>`;
+  <p class="muted" style="margin-top:8px; font-size:11px;">点行进入商机详情。共 ${overdue.length} 条逾期商机。</p>`;
   }
 
   // Build the 本年 KPI grid (4 cards: total count / amount / target / completion)

@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <title>RAS CRM</title>
-  <link rel="stylesheet" href="app/styles.css?v=20260614-2">
-  <script src="vendor/sqljs/sql-wasm.js?v=20260614-2"></script>
-  <script src="vendor/sheetjs/xlsx.full.min.js?v=20260614-2"></script>
+  <link rel="stylesheet" href="app/styles.css?v=20260614-3">
+  <script src="vendor/sqljs/sql-wasm.js?v=20260614-3"></script>
+  <script src="vendor/sheetjs/xlsx.full.min.js?v=20260614-3"></script>
 </head>
 <body>
   <div class="topbar">
@@ -13,6 +13,7 @@
     <button class="tab active" data-tab="dashboard">仪表盘</button>
     <button class="tab" data-tab="list">商机</button>
     <button class="tab" data-tab="form">新增</button>
+    <button class="tab" data-tab="detail" id="tab-detail" style="display:none;">详情</button>
     <button class="tab" data-tab="analysis">分析</button>
     <button class="tab" data-tab="dicts">字典</button>
     <button class="tab" data-tab="fieldhelp">字段说明</button>
@@ -38,23 +39,24 @@
   </div>
   <input type="file" id="import-input" accept=".xlsx" style="display:none">
   <input type="file" id="restore-input" accept=".sqlite,.db" style="display:none">
-  <script src="app/xlsx-io.js?v=20260614-2"></script>
-  <script src="app/db.js?v=20260614-2"></script>
-  <script src="app/core.js?v=20260614-2"></script>
-  <script src="app/ui-notify.js?v=20260614-2"></script>
-  <script src="app/ui-list.js?v=20260614-2"></script>
-  <script src="app/ui-form.js?v=20260614-2"></script>
-  <script src="app/ui-dicts.js?v=20260614-2"></script>
-  <script src="app/ui-dashboard.js?v=20260614-2"></script>
-  <script src="app/ui-analysis.js?v=20260614-2"></script>
-  <script src="app/ui-save.js?v=20260614-2"></script>
-  <script src="app/ui-field-help.js?v=20260614-2"></script>
+  <script src="app/xlsx-io.js?v=20260614-3"></script>
+  <script src="app/db.js?v=20260614-3"></script>
+  <script src="app/core.js?v=20260614-3"></script>
+  <script src="app/ui-notify.js?v=20260614-3"></script>
+  <script src="app/ui-list.js?v=20260614-3"></script>
+  <script src="app/ui-form.js?v=20260614-3"></script>
+  <script src="app/ui-dicts.js?v=20260614-3"></script>
+  <script src="app/ui-dashboard.js?v=20260614-3"></script>
+  <script src="app/ui-analysis.js?v=20260614-3"></script>
+  <script src="app/ui-save.js?v=20260614-3"></script>
+  <script src="app/ui-field-help.js?v=20260614-3"></script>
   <script>
     // Tab navigation
     const TAB_RENDERERS = {
       dashboard: 'renderDashboard',
       list: 'renderList',
       form: 'renderForm',
+      detail: 'renderDetail',
       analysis: 'renderAnalysis',
       dicts: 'renderDicts',
       fieldhelp: 'renderFieldHelp'
@@ -64,6 +66,11 @@
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         btn.classList.add('active');
         const tab = btn.dataset.tab;
+        // "新增" tab is a fresh-form mode — hide the transient detail tab
+        if (tab === 'form') {
+          const dt = document.getElementById('tab-detail');
+          if (dt) dt.style.display = 'none';
+        }
         const fn = window[TAB_RENDERERS[tab]];
         if (typeof fn === 'function') fn();
       };

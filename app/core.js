@@ -21,7 +21,9 @@
     fileName: '',
     fileLoaded: false,
     dbEmpty: true,
-    recentlyChanged: new Set()  // opp IDs that were just imported/changed (highlighted briefly)
+    recentlyChanged: new Set(),  // opp IDs that were just imported/changed (highlighted briefly)
+    currentOppId: null,           // opp ID currently shown in the 详情 tab (null = no opp selected)
+    detailEditing: false          // true = detail tab is in edit mode
   };
 
   // Mark a set of opp IDs as "recently changed" (highlighted in the list for 30s).
@@ -137,6 +139,7 @@
       currency: '',
       winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0,
       expectedDate: null, note: '', loseReason: '',
+      projectStatus: '',
       dictRefs: null,
       deleted: false, parseError: null, position: 0
     }, partial || {});

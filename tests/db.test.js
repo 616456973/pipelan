@@ -387,6 +387,51 @@ function test(name, fn) {
     assert.ok(state.opportunities.some(o => o.id === 'gone' && o.deleted === true), 'deleted opp present in state');
   });
 
+  await test('schema v4 includes project_status column and supports CRUD', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.clearAll();
+    const opp = {
+      id: 'o1', team: 'T', owner: 'Alice', customer: 'AcmeCo',
+      productLine: 'PL1', product: 'P110', salesChannel: '', stage: 'ST1',
+      invoiceStatus: '', currency: 'USD',
+      winRate: 0.5, amountTaxIncluded: 100, amountRmbEquivalent: 100,
+      expectedDate: null, note: '', loseReason: '',
+      projectStatus: '客户关键人:张三; 主推 P110 SaaS版',
+      dictRefs: null,
+      deleted: false, parseError: null, position: 1
+    };
+    CRM_DB.upsertOpp(opp);
+    const got = CRM_DB.getOpp('o1');
+    assert.equal(got.projectStatus, '客户关键人:张三; 主推 P110 SaaS版', 'projectStatus should roundtrip through DB');
+  });
+
+  await test('migration v3→v4: existing v3 DB gets project_status column on next init', async () => {
+    // Build a v3-shaped backup
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.clearAll();
+    // Insert a v3-shaped row (no project_status column)
+    CRM_DB._execForTest(
+      "INSERT INTO oportunidades (id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, dict_refs, deleted, parse_error, position) " +
+      "VALUES ('o1', 'old-opp', 'TeamA', 'OwnerA', 'CustA', 'PL1', 'P110', '', 'ST1', '', 'USD', 0.5, 100, 100, null, '', '', null, 0, null, 1)"
+    );
+    // Force version back to 3 to simulate an old DB
+    CRM_DB._execForTest("DELETE FROM meta WHERE key='schema_version'");
+    CRM_DB._execForTest("INSERT INTO meta (key, value) VALUES ('schema_version', '3')");
+    const backup = CRM_DB.exportBackup();
+    // Re-init from this v3 backup → should migrate to v4
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.importBackup(backup);
+    // Verify project_status column was added
+    const cols = CRM_DB._execForTest('PRAGMA table_info(oportunidades)');
+    const colNames = cols[0].values.map(c => c[1]);
+    assert.ok(colNames.includes('project_status'), 'project_status should be added by v3→v4 migration');
+    // Verify old data preserved
+    const got = CRM_DB.getOpp('o1');
+    assert.equal(got.oppName, 'old-opp', 'old data should survive v3→v4 migration');
+    assert.equal(got.projectStatus, '', 'projectStatus should default to empty for migrated rows');
+    assert.equal(CRM_DB.getMeta('schema_version'), '4', 'schema_version should be bumped to 4');
+  });
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed > 0 ? 1 : 0);
 })();

@@ -145,12 +145,12 @@
 
   function rowHtml(o) {
     const changed = CRM.state.recentlyChanged && CRM.state.recentlyChanged.has(o.id);
-    const cls = o.parseError ? 'row-error' : (o.deleted ? 'row-deleted' : (editingId === o.id ? 'row-editing' : (changed ? 'row-changed' : '')));
+    const cls = o.parseError ? 'row-error' : (o.deleted ? 'row-deleted' : (editingId === o.id ? 'row-editing' : (changed ? 'row-changed' : 'row-clickable')));
     const errTitle = o.parseError ? `title="行 ${o.parseError.row}: ${o.parseError.message}"` : '';
     const safeId = o.id.replace(/'/g, "\\'");
     const isEditing = editingId === o.id;
     return `
-      <tr class="${cls}" ${errTitle}>
+      <tr class="${cls}" ${errTitle} data-opp-id="${o.id}">
         <td>${o.team || ''}</td>
         <td>${isEditing
           ? `<select id="ed-owner-${safeId}" class="cell-edit"><option value="">—</option>${(CRM.state.dicts.owners || []).map(v => `<option value="${v}" ${v === o.owner ? 'selected' : ''}>${v}</option>`).join('')}</select>`
@@ -271,6 +271,16 @@
       </div>
     `;
     attachFilterHandlers();
+    // Row click → open detail page (excluding per-row action buttons and the
+    // inline-editing row, which has its own save/cancel handlers)
+    content.querySelectorAll('tr.row-clickable').forEach(row => {
+      row.onclick = (e) => {
+        // Don't navigate if user clicked a button, select, or input inside the row
+        if (e.target.closest('button, select, input, a, .cell-edit')) return;
+        const id = row.dataset.oppId;
+        if (id && typeof window.viewOpp === 'function') window.viewOpp(id);
+      };
+    });
     // Wire up stage change → auto-update win rate
     content.querySelectorAll('[id^="ed-stage-"]').forEach(sel => {
       sel.onchange = (e) => {
