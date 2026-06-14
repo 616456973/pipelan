@@ -164,9 +164,18 @@
     if (!el) return;
     const dicts = CRM.state.dicts || {};
     const dictTotal = Object.values(dicts).reduce((s, d) => s + ((d && d.length) || 0), 0);
-    const empty = (CRM.state.opportunities || []).length === 0 && dictTotal === 0;
-    el.textContent = empty ? '○ 空' : '● 已加载';
+    const oppCount = (CRM.state.opportunities || []).length;
+    const empty = oppCount === 0 && dictTotal === 0;
+    // Show data source for debug
+    const src = (window.CRM_DB && window.CRM_DB.getDataSource) ? window.CRM_DB.getDataSource() : '?';
+    const srcLabel = src === 'file' ? '文件' : src === 'indexeddb' ? 'IndexedDB' : '空';
+    if (empty) {
+      el.textContent = '○ ' + srcLabel;
+    } else {
+      el.textContent = '● ' + srcLabel + ' (' + oppCount + ')';
+    }
     el.className = 'db-status ' + (empty ? 'empty' : 'loaded');
+    el.title = '数据来源: ' + srcLabel + ' · ' + oppCount + ' 条商机';
   }
 
   function wireImportExport() {

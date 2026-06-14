@@ -162,6 +162,10 @@
     await saveToIndexedDb();
   }
 
+  // ---- Data source tracking (for debug indicator) ----
+  let _dataSource = 'none';  // 'file' | 'indexeddb' | 'none'
+  function getDataSource() { return _dataSource; }
+
   async function saveToIndexedDb() {
     // First, try the local dev server's /api/save-db endpoint (mirror of load).
     if (typeof fetch !== 'undefined' && typeof location !== 'undefined' && location.protocol !== 'file:') {
@@ -172,8 +176,14 @@
           headers: { 'Content-Type': 'application/octet-stream' },
           body: bytes
         });
-        if (res.ok) return;
-      } catch (e) { /* endpoint not available, fall through */ }
+        if (res.ok) {
+          console.log('[db] saved to /api/save-db (' + bytes.byteLength + ' bytes)');
+          return;
+        }
+        console.warn('[db] /api/save-db returned ' + res.status);
+      } catch (e) {
+        console.warn('[db] /api/save-db unreachable: ' + e.message);
+      }
     }
     // Fall back to IndexedDB
     if (typeof indexedDB === 'undefined') return;
@@ -181,6 +191,7 @@
       const bytes = db.export();
       const idb = await openIdb();
       await idbPut(idb, bytes);
+      console.log('[db] saved to IndexedDB (' + bytes.byteLength + ' bytes)');
     } catch (e) { /* swallow */ }
   }
 
@@ -196,15 +207,29 @@
         const res = await fetch('/api/load-db', { cache: 'no-store' });
         if (res.ok) {
           const buf = await res.arrayBuffer();
-          if (buf.byteLength > 0) return new Uint8Array(buf);
+          if (buf.byteLength > 0) {
+            _dataSource = 'file';
+            console.log('[db] loaded from /api/load-db (' + buf.byteLength + ' bytes, source=file)');
+            return new Uint8Array(buf);
+          }
         }
-      } catch (e) { /* endpoint not available (no server.py running) */ }
+        console.warn('[db] /api/load-db returned ' + res.status + ', falling back to IndexedDB');
+      } catch (e) {
+        console.warn('[db] /api/load-db unreachable: ' + e.message + ', falling back to IndexedDB');
+      }
     }
     // Fall back to IndexedDB
     if (typeof indexedDB === 'undefined') return null;
     try {
       const idb = await openIdb();
-      return await idbGet(idb);
+      const bytes = await idbGet(idb);
+      if (bytes) {
+        _dataSource = 'indexeddb';
+        console.log('[db] loaded from IndexedDB (' + bytes.byteLength + ' bytes, source=indexeddb)');
+        return bytes;
+      }
+      _dataSource = 'none';
+      console.log('[db] no data in file or IndexedDB, starting fresh (source=none)');
     } catch (e) { return null; }
   }
 
@@ -433,6 +458,7 @@
     exportBackup, importBackup,
     scheduleSave, flushSave,
     getMeta, setMeta,
+    getDataSource,
     _execForTest: (sql) => db.exec(sql),
     _setDbForTest
   };
