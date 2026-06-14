@@ -18,6 +18,12 @@
   --shadow-lg: 0 12px 24px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.04);
   --radius: 12px;
   --radius-sm: 6px;
+  /* v3.0.1 polish: motion + focus tokens */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 280ms;
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.18);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -28,6 +34,27 @@ html, body {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
+
+/* === Global polish: focus + selection + scrollbar === */
+::selection { background: rgba(37, 99, 235, 0.18); color: var(--text); }
+:focus { outline: none; }
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+/* Modern slim scrollbar (Webkit) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  border: 2px solid var(--bg);
+  transition: background var(--dur) var(--ease);
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.24); }
+/* Firefox */
+html { scrollbar-width: thin; scrollbar-color: rgba(15, 23, 42, 0.18) transparent; }
 
 /* === Topbar === */
 .topbar {
@@ -52,11 +79,13 @@ html, body {
   cursor: pointer;
   font-size: 14px;
   font-family: inherit;
-  transition: all 0.15s;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
   font-weight: 500;
+  position: relative;
 }
 .tab:hover { background: var(--surface-2); border-color: #cbd5e0; color: var(--text); }
-.tab.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+.tab:active { transform: scale(0.98); }
+.tab.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25); }
 
 /* Topbar tabs override (dark gradient background) */
 .topbar .tab {
@@ -85,13 +114,25 @@ html, body {
   cursor: pointer;
   font-size: 13px;
   font-family: inherit;
-  transition: all 0.15s;
+  transition: background var(--dur) var(--ease),
+              border-color var(--dur) var(--ease),
+              transform var(--dur-fast) var(--ease),
+              box-shadow var(--dur) var(--ease),
+              color var(--dur) var(--ease);
   font-weight: 500;
+  user-select: none;
 }
 .btn:hover { background: var(--surface-2); border-color: #cbd5e0; transform: translateY(-1px); box-shadow: var(--shadow); }
+.btn:active { transform: translateY(0); box-shadow: none; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-.btn-primary:hover { background: #1d4ed8; }
+.btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+.btn-primary:active { background: #1e40af; }
 .btn-danger { color: var(--danger); }
+.btn-danger:hover { background: #fef2f2; border-color: #fca5a5; }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); border-color: var(--border); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
 
 /* === Notification bar === */
 .notify-bar {
@@ -130,12 +171,31 @@ html, body {
   padding: 24px;
   box-shadow: var(--shadow);
   margin-bottom: 20px;
-  transition: box-shadow 0.2s;
+  transition: box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.card:hover { box-shadow: var(--shadow-md); }
+.card:hover { box-shadow: var(--shadow-md); border-color: #d6deea; }
 h2 { font-size: 20px; font-weight: 600; margin-bottom: 14px; color: var(--text); letter-spacing: 0.2px; }
 h3 { font-size: 15px; font-weight: 600; margin: 14px 0 10px; color: var(--text-2); }
 .muted { color: var(--muted); font-size: 13px; }
+
+/* === Generic empty state === */
+.empty-state {
+  padding: 56px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.empty-state .empty-icon {
+  font-size: 40px;
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+.empty-state .empty-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.empty-state .empty-sub { font-size: 12px; }
 .chip {
   display: inline-block;
   padding: 4px 12px;
@@ -158,17 +218,35 @@ code {
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 table col { min-width: 0; }
 th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-th { background: var(--surface-2); font-weight: 600; color: var(--text-2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+th {
+  background: var(--surface-2);
+  font-weight: 600;
+  color: var(--text-2);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 2px solid var(--border);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+tr {
+  transition: background var(--dur) var(--ease);
+}
 tr:hover td { background: var(--surface-2); }
 tr.row-error td { background: #fef2f2; color: #b91c1c; }
 tr.row-deleted td { color: var(--muted); text-decoration: line-through; }
 tfoot tr td { background: var(--surface-2); font-weight: 600; border-top: 2px solid var(--border); }
+/* Make card scroll on long tables */
+.card:has(table) { overflow: visible; }
+.card-scroll { max-height: 70vh; overflow: auto; border-radius: var(--radius); }
 
 /* === Forms === */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr; } }
-.field label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4px; font-weight: 500; }
-.field .help { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; font-style: italic; }
+.field label { display: block; font-size: 13px; color: var(--text); margin-bottom: 6px; font-weight: 500; }
+.field .help { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
 .field input, .field select, .field textarea {
   width: 100%;
   padding: 9px 12px;
@@ -177,15 +255,19 @@ tfoot tr td { background: var(--surface-2); font-weight: 600; border-top: 2px so
   font-size: 13px;
   font-family: inherit;
   background: #fff;
-  transition: all 0.15s;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease);
+  color: var(--text);
+}
+.field input:hover, .field select:hover, .field textarea:hover {
+  border-color: #cbd5e0;
 }
 .field input:focus, .field select:focus, .field textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: var(--focus-ring);
 }
-.field input.invalid, .field select.invalid { border-color: var(--danger); }
-.field .err { color: var(--danger); font-size: 12px; margin-top: 2px; }
+.field input.invalid, .field select.invalid { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15); }
+.field .err { color: var(--danger); font-size: 12px; margin-top: 4px; }
 
 /* === KPI cards === */
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin-bottom: 24px; }
@@ -197,9 +279,9 @@ tfoot tr td { background: var(--surface-2); font-weight: 600; border-top: 2px so
   box-shadow: var(--shadow);
   position: relative;
   overflow: hidden;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
-.kpi:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: #cbd5e0; }
 .kpi::before {
   content: "";
   position: absolute;
@@ -256,13 +338,14 @@ tfoot tr td { background: var(--surface-2); font-weight: 600; border-top: 2px so
 .kpi.k-orange::before { background: linear-gradient(90deg, #ea580c, #f59e0b); }
 .kpi.k-cyan::before { background: linear-gradient(90deg, #0891b2, #06b6d4); }
 .kpi.k-pink::before { background: linear-gradient(90deg, #db2777, #ec4899); }
-.kpi .sub { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+/* .kpi .sub is defined in the main .kpi block above; do not redeclare */
 
 /* 表格数字右对齐 */
 table td.num, table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* 阶段颜色 chip */
-.tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 1.6; }
+.tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 1.6; transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease); }
+.tag:hover { transform: scale(1.05); }
 .tag.stage-st1 { background: #f1f5f9; color: #475569; }
 .tag.stage-st2 { background: #dbeafe; color: #1d4ed8; }
 .tag.stage-st3 { background: #ede9fe; color: #6d28d9; }
@@ -797,5 +880,75 @@ tr.row-changed td {
   height: 100%;
   background: linear-gradient(90deg, var(--primary), var(--accent));
   border-radius: 2px;
-  transition: width 0.3s;
+  transition: width var(--dur-slow) var(--ease);
+}
+
+/* === v3.0.2 global polish === */
+
+/* Skeleton loader for slow async ops */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0%, #eef2f7 50%, var(--surface-2) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 4px;
+  min-height: 12px;
+}
+
+/* Fade-in for content swaps */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+#content > * { animation: fadeIn var(--dur-slow) var(--ease); }
+
+/* Better number stats */
+.stat-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Compact info row (used for keyboard hints etc.) */
+.kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+/* Print: hide chrome */
+@media print {
+  .topbar, .filters, .btn, .tab, .notify-bar { display: none !important; }
+  .card { box-shadow: none; border-color: #999; }
+  body { background: #fff; }
+}
+
+/* Mobile: collapse padding, single column for KPI */
+@media (max-width: 700px) {
+  .container { padding: 0 14px 60px; }
+  .topbar { padding: 10px 14px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 16px; margin-right: 6px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .kpi { padding: 14px; }
+  .kpi .value { font-size: 20px; }
+  .dash-hero { padding: 20px; flex-direction: column; align-items: flex-start; gap: 16px; }
+  .dash-hero-stats { gap: 16px; }
+  .dash-hero-stat-num { font-size: 24px; }
+  .filters { padding: 10px; gap: 6px; }
+  .filters input { min-width: 120px; }
+}
+
+/* Reduced motion: respect user OS setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
