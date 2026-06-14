@@ -310,7 +310,14 @@
     if (!o) return;
     if (!confirm(`确定删除商机 "${o.oppName}"？\n（软删除，可在"显示已删除"里找回）`)) return;
     o.deleted = true;
-    CRM.markModified();
+    // Persist + force immediate flush (so quick refreshes don't lose the delete)
+    try {
+      CRM_DB.upsertOpp(o);
+      if (CRM_DB.flushSave) CRM_DB.flushSave();
+    } catch (e) {
+      console.error('delete failed', e);
+      Notify.error('删除失败: ' + e.message);
+    }
     renderList();
     Notify.info('已删除: ' + o.oppName);
   }
