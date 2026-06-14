@@ -551,6 +551,7 @@
     // Total non-deleted opps (matches the list view's "商机数" header)
     const totalCount = CRM.state.opportunities.filter(o => !o.deleted && !o.parseError).length;
     const actual = computeYearAmount(CRM.state.opportunities, window.__dashKpiMetric);
+    const collected = computeYearCollected(CRM.state.opportunities);
     const currentYear = new Date().getFullYear();
     const target = (typeof CRM !== 'undefined' && CRM.getKpiTarget) ? CRM.getKpiTarget() : 0;  // stored in 元
     const pct = target > 0 ? (actual / target * 100) : null;
@@ -569,6 +570,11 @@
         <div class="value">¥${(actual / 10000).toLocaleString(undefined, {maximumFractionDigits: 1})} 万</div>
       </div>
       <div class="year-kpi-card">
+        <div class="label">已回款金额</div>
+        <div class="value">¥${(collected / 10000).toLocaleString(undefined, {maximumFractionDigits: 1})} 万</div>
+        <div class="year-kpi-sub">已回款 + 已预付 (实际)</div>
+      </div>
+      <div class="year-kpi-card">
         <div class="label">本年度目标</div>
         <div class="value">${targetDisplay}</div>
       </div>
@@ -579,6 +585,22 @@
       </div>
     </div>
   `;
+  }
+
+  // Compute 本年 actual cash-in: 已回款 (full amount) + 已预付 (prepaidAmount only).
+  // Both are restricted to opps with expectedDate in the current year.
+  function computeYearCollected(opps) {
+    const thisYear = new Date().getFullYear();
+    let sum = 0;
+    for (const o of opps) {
+      if (o.deleted || o.parseError) continue;
+      if (!o.expectedDate || isNaN(Number(o.expectedDate))) continue;
+      const d = new Date((Number(o.expectedDate) - 25569) * 86400 * 1000);
+      if (d.getUTCFullYear() !== thisYear) continue;
+      if (o.invoiceStatus === '已回款') sum += (o.amountTaxIncluded || 0);
+      else if (o.invoiceStatus === '已预付') sum += (o.prepaidAmount || 0);
+    }
+    return sum;
   }
 
   function topBarHtml(items, metric, groupBy) {
