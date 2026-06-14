@@ -7,3 +7,5 @@ Thumbs.db
 .idea/
 .vscode/
 __pycache__/
+ras_crm.sqlite
+ras_crm.sqlite.tmp
