@@ -104,16 +104,29 @@
     }
     if (m.includes('已开票')) {
       // "已开票" financial caliber = invoiced + collected + prepaid
-      // (i.e., all money that has actually moved or been committed to move)
+      // For 已预付, use the actual prepaidAmount (not the full contract)
+      // to avoid double-counting the rest of the contract elsewhere.
       return filtered.filter(o => o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付')
-        .reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+        .reduce((s, o) => s + oppCashValue(o), 0);
     }
     if (m.includes('已回款')) {
-      return filtered.filter(o => o.invoiceStatus === '已回款')
-        .reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+      // "已回款" financial caliber = collected (full amount) + prepaid (actual).
+      // Matches the standalone "已回款金额" card.
+      return filtered.filter(o => o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付')
+        .reduce((s, o) => s + oppCashValue(o), 0);
     }
     // Fallback: 含税金额
     return filtered.reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
+  }
+
+  // Return the "cash-equivalent" amount for an opp based on its invoice status:
+  //   已开票 / 已回款 -> full contract amount
+  //   已预付        -> prepaidAmount only (the rest of the contract hasn't moved yet)
+  function oppCashValue(o) {
+    const s = o.invoiceStatus;
+    if (s === '已开票' || s === '已回款') return o.amountTaxIncluded || 0;
+    if (s === '已预付') return o.prepaidAmount || 0;
+    return 0;
   }
 
   function renderDashboard() {
@@ -419,9 +432,9 @@
       case 'ST4 赢单金额':
         return (o.stage && o.stage.indexOf('ST4') >= 0) ? amt : 0;
       case '已开票金额':
-        return (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') ? amt : 0;
+        return (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') ? oppCashValue(o) : 0;
       case '已回款金额':
-        return (o.invoiceStatus === '已回款') ? amt : 0;
+        return (o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') ? oppCashValue(o) : 0;
       default: return amt;
     }
   }
@@ -597,8 +610,7 @@
       if (!o.expectedDate || isNaN(Number(o.expectedDate))) continue;
       const d = new Date((Number(o.expectedDate) - 25569) * 86400 * 1000);
       if (d.getUTCFullYear() !== thisYear) continue;
-      if (o.invoiceStatus === '已回款') sum += (o.amountTaxIncluded || 0);
-      else if (o.invoiceStatus === '已预付') sum += (o.prepaidAmount || 0);
+      if (o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') sum += oppCashValue(o);
     }
     return sum;
   }
@@ -644,8 +656,8 @@
       groups[k]['含税金额'] += amt;
       groups[k]['加权金额'] += amt * (o.winRate || 0);
       if (o.stage && o.stage.indexOf('ST4') >= 0) groups[k]['ST4 赢单金额'] += amt;
-      if (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') groups[k]['已开票金额'] += amt;
-      if (o.invoiceStatus === '已回款') groups[k]['已回款金额'] += amt;
+      if (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') groups[k]['已开票金额'] += oppCashValue(o);
+      if (o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') groups[k]['已回款金额'] += oppCashValue(o);
     }
     const arr = Object.values(groups).sort((a, b) => (b[metric] || 0) - (a[metric] || 0)).slice(0, n);
     if (!arr.length) return '<p class="muted">（无数据）</p>';
