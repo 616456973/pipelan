@@ -363,6 +363,30 @@ function test(name, fn) {
     assert.ok(!tables.includes('dict_kpi_amounts'), 'dict_kpi_amounts should not be re-created after removal');
   });
 
+  await test('loadAllToState includes soft-deleted opps (so "显示已删除" toggle has rows)', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.clearAll();
+    CRM_DB.upsertOpp({
+      id: 'live', team: '', owner: '', customer: '',
+      productLine: '', product: '', salesChannel: '', stage: 'ST1',
+      invoiceStatus: '', currency: 'USD',
+      winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0, expectedDate: null,
+      note: '', loseReason: '', dictRefs: null,
+      deleted: false, parseError: null, position: 1
+    });
+    CRM_DB.upsertOpp({
+      id: 'gone', team: '', owner: '', customer: '',
+      productLine: '', product: '', salesChannel: '', stage: 'ST1',
+      invoiceStatus: '', currency: 'USD',
+      winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0, expectedDate: null,
+      note: '', loseReason: '', dictRefs: null,
+      deleted: true, parseError: null, position: 2
+    });
+    const state = CRM_DB.loadAllToState();
+    assert.equal(state.opportunities.length, 2, 'loadAllToState should include deleted opps in state');
+    assert.ok(state.opportunities.some(o => o.id === 'gone' && o.deleted === true), 'deleted opp present in state');
+  });
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed > 0 ? 1 : 0);
 })();

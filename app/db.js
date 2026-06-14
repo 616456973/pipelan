@@ -307,7 +307,10 @@
   }
 
   function loadAllToState() {
-    return { opportunities: listOpps(), dicts: listDicts() };
+    // includeDeleted:true so the list page "显示已删除" toggle has rows to show.
+    // All consumers (dashboard, analysis, dict ref counts) already filter !o.deleted
+    // at their own level, so this is safe.
+    return { opportunities: listOpps({ includeDeleted: true }), dicts: listDicts() };
   }
 
   // ---- Maintenance ----
