@@ -172,6 +172,18 @@
   }
 
   async function loadFromIndexedDb() {
+    // First, try to load from a SQLite file in the same directory as the HTML
+    // (so data follows when the user moves the app folder). This works because
+    // `fetch('./ras_crm.sqlite')` resolves relative to the page URL — for
+    // `file://` URLs that's the HTML file's folder.
+    try {
+      const res = await fetch('./ras_crm.sqlite', { cache: 'no-store' });
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > 0) return new Uint8Array(buf);
+      }
+    } catch (e) { /* file:// fetch can fail in some browsers, or file missing */ }
+    // Fall back to IndexedDB (current behavior)
     if (typeof indexedDB === 'undefined') return null;
     try {
       const idb = await openIdb();
