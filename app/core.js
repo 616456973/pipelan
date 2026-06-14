@@ -139,7 +139,7 @@
       currency: 'RMB',
       winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0,
       expectedDate: null, note: '', loseReason: '',
-      projectStatus: '',
+      projectStatus: '', prepaidAmount: 0,
       dictRefs: null,
       deleted: false, parseError: null, position: 0
     }, partial || {});

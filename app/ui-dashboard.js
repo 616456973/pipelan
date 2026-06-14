@@ -103,7 +103,9 @@
         .reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
     }
     if (m.includes('已开票')) {
-      return filtered.filter(o => o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款')
+      // "已开票" financial caliber = invoiced + collected + prepaid
+      // (i.e., all money that has actually moved or been committed to move)
+      return filtered.filter(o => o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付')
         .reduce((s, o) => s + (o.amountTaxIncluded || 0), 0);
     }
     if (m.includes('已回款')) {
@@ -417,7 +419,7 @@
       case 'ST4 赢单金额':
         return (o.stage && o.stage.indexOf('ST4') >= 0) ? amt : 0;
       case '已开票金额':
-        return (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款') ? amt : 0;
+        return (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') ? amt : 0;
       case '已回款金额':
         return (o.invoiceStatus === '已回款') ? amt : 0;
       default: return amt;
@@ -620,7 +622,7 @@
       groups[k]['含税金额'] += amt;
       groups[k]['加权金额'] += amt * (o.winRate || 0);
       if (o.stage && o.stage.indexOf('ST4') >= 0) groups[k]['ST4 赢单金额'] += amt;
-      if (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款') groups[k]['已开票金额'] += amt;
+      if (o.invoiceStatus === '已开票' || o.invoiceStatus === '已回款' || o.invoiceStatus === '已预付') groups[k]['已开票金额'] += amt;
       if (o.invoiceStatus === '已回款') groups[k]['已回款金额'] += amt;
     }
     const arr = Object.values(groups).sort((a, b) => (b[metric] || 0) - (a[metric] || 0)).slice(0, n);

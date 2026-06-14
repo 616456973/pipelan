@@ -418,18 +418,37 @@ function test(name, fn) {
     CRM_DB._execForTest("DELETE FROM meta WHERE key='schema_version'");
     CRM_DB._execForTest("INSERT INTO meta (key, value) VALUES ('schema_version', '3')");
     const backup = CRM_DB.exportBackup();
-    // Re-init from this v3 backup → should migrate to v4
+    // Re-init from this v3 backup → should migrate through v3→v4→v5
     await CRM_DB.initDb({ forceInMemory: true });
     CRM_DB.importBackup(backup);
-    // Verify project_status column was added
+    // Verify both new columns were added
     const cols = CRM_DB._execForTest('PRAGMA table_info(oportunidades)');
     const colNames = cols[0].values.map(c => c[1]);
     assert.ok(colNames.includes('project_status'), 'project_status should be added by v3→v4 migration');
+    assert.ok(colNames.includes('prepaid_amount'), 'prepaid_amount should be added by v4→v5 migration');
     // Verify old data preserved
     const got = CRM_DB.getOpp('o1');
-    assert.equal(got.oppName, 'old-opp', 'old data should survive v3→v4 migration');
+    assert.equal(got.oppName, 'old-opp', 'old data should survive v3→v4→v5 migrations');
     assert.equal(got.projectStatus, '', 'projectStatus should default to empty for migrated rows');
-    assert.equal(CRM_DB.getMeta('schema_version'), '4', 'schema_version should be bumped to 4');
+    assert.equal(got.prepaidAmount, 0, 'prepaidAmount should default to 0 for migrated rows');
+    assert.equal(CRM_DB.getMeta('schema_version'), '5', 'schema_version should be at 5 after both migrations');
+  });
+
+  await test('schema v5: prepaid_amount roundtrips through upsertOpp', async () => {
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.clearAll();
+    CRM_DB.upsertOpp({
+      id: 'o1', team: 'T', owner: 'Alice', customer: 'Acme',
+      productLine: 'PL1', product: 'P110', salesChannel: '', stage: 'ST4',
+      invoiceStatus: '已预付', currency: 'RMB',
+      winRate: 1, amountTaxIncluded: 100000, amountRmbEquivalent: 100000,
+      expectedDate: null, note: '', loseReason: '',
+      projectStatus: '', prepaidAmount: 30000,
+      dictRefs: null, deleted: false, parseError: null, position: 1
+    });
+    const got = CRM_DB.getOpp('o1');
+    assert.equal(got.prepaidAmount, 30000, 'prepaidAmount should roundtrip');
+    assert.equal(got.invoiceStatus, '已预付', 'invoiceStatus should be 已预付');
   });
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

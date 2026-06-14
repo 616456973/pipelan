@@ -92,6 +92,7 @@
       salesChannel: v('f-salesChannel'),
       note: v('f-note'),
       projectStatus: v('f-projectStatus'),
+      prepaidAmount: parseFloat(v('f-prepaidAmount')) || 0,
       loseReason: Array.from(document.querySelectorAll('.lose-reason-cb:checked')).map(cb => cb.value).join(',')
     };
   }
@@ -178,7 +179,14 @@
           <div class="field ${roClass}"><label>发票状态</label><select id="f-invoiceStatus" ${dis}>
             <option value="">(无)</option>
             ${BUILTIN_INVOICE_STATUSES.map(s => `<option value="${s}" ${s === opp.invoiceStatus ? 'selected' : ''}>${s}</option>`).join('')}
-          </select></div>
+          </select>
+            ${(opp.invoiceStatus === '已预付') ? `
+              <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);">
+                <label style="font-size:11px; color:var(--muted); display:block; margin-bottom:4px;">预付金额:</label>
+                <input id="f-prepaidAmount" type="number" step="0.01" min="0" value="${opp.prepaidAmount || 0}" ${ro} style="font-size:13px;">
+              </div>
+            ` : ''}
+          </div>
           <div class="field ${roClass}"><label>币种 *</label><select id="f-currency" ${dis}>${d.currencies.map(t => `<option value="${t}" ${t === opp.currency ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-currency"></div></div>
           <div class="field ${roClass}"><label>含税金额 *</label><input id="f-amount" type="number" step="0.01" value="${opp.amountTaxIncluded || opp.amount || 0}" ${ro}><div class="err" id="err-amount"></div></div>
           <div class="field ${roClass}">
@@ -226,20 +234,41 @@
     const stageEl = document.getElementById('f-stage');
     if (stageEl && !readonly) {
       stageEl.onchange = (e) => {
-        const stage = e.target.value || '';
-        const m = stage.toUpperCase().match(/ST\s*([1-9])/);
+        const newStage = e.target.value || '';
+        // Auto-suggest win rate based on new stage
+        const m = newStage.toUpperCase().match(/ST\s*([1-9])/);
         if (m) {
           const key = 'ST' + m[1];
           if (STAGE_DEFAULT_WINRATE[key] !== undefined) {
             document.getElementById('f-winRate').value = STAGE_DEFAULT_WINRATE[key];
           }
         }
-        // Re-render to show/hide lose reason
-        if ((e.target.value.indexOf('ST5') >= 0) !== (opp.stage && opp.stage.indexOf('ST5') >= 0)) {
-          const oldStage = opp.stage;
-          opp.stage = e.target.value;
+        // ST5 → ST1-4: clear stale loseReason so it doesn't bleed into the saved opp
+        const wasST5 = opp.stage && opp.stage.indexOf('ST5') >= 0;
+        const isST5 = newStage.indexOf('ST5') >= 0;
+        if (wasST5 && !isST5) {
+          opp.loseReason = '';
+          Notify.info('已退出 ST5,丢单原因已清空');
+        }
+        // Commit the new stage to the opp object so subsequent re-renders stay consistent
+        opp.stage = newStage;
+        // Re-render only when the loseReason section needs to be added/removed
+        if (wasST5 !== isST5) {
           renderOppForm(opp, mode);
-          opp.stage = oldStage;
+        }
+      };
+    }
+
+    // 发票状态 onchange: re-render when to/from 已预付 (shows/hides 预付金额 sub-field)
+    const invEl = document.getElementById('f-invoiceStatus');
+    if (invEl && !readonly) {
+      invEl.onchange = (e) => {
+        const newStatus = e.target.value;
+        const wasPrepaid = opp.invoiceStatus === '已预付';
+        const isPrepaid = newStatus === '已预付';
+        opp.invoiceStatus = newStatus;
+        if (wasPrepaid !== isPrepaid) {
+          renderOppForm(opp, mode);
         }
       };
     }

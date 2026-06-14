@@ -85,6 +85,15 @@
       }
       setMeta('schema_version', '4');
     }
+    if (getMeta('schema_version') === '4') {
+      // v4 → v5: add prepaid_amount column for 已预付 发票状态.
+      const cols = db.exec("PRAGMA table_info(oportunidades)");
+      const hasPrepaid = cols[0] && cols[0].values.some(c => c[1] === 'prepaid_amount');
+      if (!hasPrepaid) {
+        db.run("ALTER TABLE oportunidades ADD COLUMN prepaid_amount REAL DEFAULT 0");
+      }
+      setMeta('schema_version', '5');
+    }
   }
 
   // Idempotent: creates all dict tables (safe to call on any DB state).
@@ -120,6 +129,7 @@
       stage TEXT, invoice_status TEXT, currency TEXT,
       win_rate REAL, amount_tax_included REAL, amount_rmb_equivalent REAL,
       expected_date REAL, note TEXT, lose_reason TEXT, project_status TEXT,
+      prepaid_amount REAL DEFAULT 0,
       dict_refs TEXT,
       deleted INTEGER DEFAULT 0, parse_error TEXT, position INTEGER
     );`);
@@ -212,13 +222,14 @@
       amountRmbEquivalent: row[13] == null ? 0 : row[13],
       expectedDate: row[14], note: row[15] || '', loseReason: row[16] || '',
       projectStatus: row[17] || '',
-      dictRefs: row[18] || null,
-      deleted: !!row[19], parseError: row[20] || null,
-      position: row[21] || 0
+      prepaidAmount: row[18] == null ? 0 : row[18],
+      dictRefs: row[19] || null,
+      deleted: !!row[20], parseError: row[21] || null,
+      position: row[22] || 0
     };
   }
 
-  const COLS = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, project_status, dict_refs, deleted, parse_error, position';
+  const COLS = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, project_status, prepaid_amount, dict_refs, deleted, parse_error, position';
 
   function listOpps(opts) {
     opts = opts || {};
@@ -242,17 +253,19 @@
   }
 
   function upsertOpp(opp) {
-    const cols = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, project_status, dict_refs, deleted, parse_error, position';
+    const cols = 'id, opp_name, team, owner, customer, product_line, product, sales_channel, stage, invoice_status, currency, win_rate, amount_tax_included, amount_rmb_equivalent, expected_date, note, lose_reason, project_status, prepaid_amount, dict_refs, deleted, parse_error, position';
     const params = [
       opp.id, opp.oppName || '',
       opp.team, opp.owner, opp.customer,
       opp.productLine, opp.product, opp.salesChannel, opp.stage,
       opp.invoiceStatus, opp.currency,
       opp.winRate, opp.amountTaxIncluded, opp.amountRmbEquivalent,
-      opp.expectedDate, opp.note, opp.loseReason, opp.projectStatus || '', opp.dictRefs,
+      opp.expectedDate, opp.note, opp.loseReason, opp.projectStatus || '',
+      opp.prepaidAmount || 0,
+      opp.dictRefs,
       opp.deleted ? 1 : 0, opp.parseError, opp.position || 0
     ];
-    const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
+    const placeholders = '?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?';
     db.run('INSERT OR REPLACE INTO oportunidades (' + cols + ') VALUES (' + placeholders + ')', params);
     scheduleSave();
   }
