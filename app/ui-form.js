@@ -6,7 +6,10 @@
   'use strict';
 
   const BUILTIN_INVOICE_STATUSES = ['未开发票', '已开票', '合同中', '已回款', '已预付'];
-  const STAGE_DEFAULT_WINRATE = { 'ST1': 0.1, 'ST2': 0.3, 'ST3': 0.5, 'ST4': 1, 'ST5': 0 };
+  // Stage → win-rate mapping is FIXED (per sales workflow policy).
+  // User cannot override; the form's win-rate field is always readonly
+  // and auto-updates on stage change.
+  const STAGE_DEFAULT_WINRATE = { 'ST1': 0, 'ST2': 0.3, 'ST3': 0.5, 'ST4': 1, 'ST5': 0 };
   const PROJECT_STATUS_PLACEHOLDER = '客户关键人,销售产品/服务等';
 
   // Module-level: which opp is being edited/created, and which mode.
@@ -213,8 +216,9 @@
           <div class="field ${roClass}"><label>币种 *</label><select id="f-currency" ${dis}>${d.currencies.map(t => `<option value="${t}" ${t === opp.currency ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="err" id="err-currency"></div></div>
           <div class="field ${roClass}"><label>含税金额 *</label><input id="f-amount" type="number" step="0.01" value="${opp.amountTaxIncluded || opp.amount || 0}" ${ro}><div class="err" id="err-amount"></div></div>
           <div class="field ${roClass}">
-            <label>赢率 (0-1) *</label>
-            <input id="f-winRate" type="number" step="0.01" min="0" max="1" value="${opp.winRate}" ${ro}>
+            <label>赢率 (固定,由阶段决定)</label>
+            <input id="f-winRate" type="number" step="0.01" min="0" max="1" value="${opp.winRate}" readonly tabindex="-1" style="background:var(--surface-2); cursor:default;" title="赢率由阶段自动决定 (ST1=0/ST2=30%/ST3=50%/ST4=100%/ST5=0),不可手动调整">
+            <div class="help">改阶段时自动设置,不可手动调整</div>
             <div class="err" id="err-winRate"></div>
             ${showLoseReason ? `
               <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);">

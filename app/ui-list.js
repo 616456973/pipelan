@@ -17,7 +17,9 @@
   // Row-level edit state. null = no row in edit mode; otherwise the opp.id being edited.
   let editingId = null;
 
-  const STAGE_DEFAULT_WINRATE = { 'ST1': 0.1, 'ST2': 0.3, 'ST3': 0.5, 'ST4': 1, 'ST5': 0 };
+  // Stage → win-rate mapping is FIXED (per sales workflow policy).
+  // Win rate cannot be edited; the form auto-updates it on stage change.
+  const STAGE_DEFAULT_WINRATE = { 'ST1': 0, 'ST2': 0.3, 'ST3': 0.5, 'ST4': 1, 'ST5': 0 };
 
   function uniqueValues(field) {
     const set = new Set();
@@ -166,8 +168,8 @@
           ? `<select id="ed-invoiceStatus-${safeId}" class="cell-edit"><option value="">—</option>${['未开发票', '已开票', '合同中', '已回款', '已预付'].map(s => `<option value="${s}" ${s === o.invoiceStatus ? 'selected' : ''}>${s}</option>`).join('')}</select>`
           : `<span class="tag inv-${invCode(o.invoiceStatus)}">${o.invoiceStatus || ''}</span>`}</td>
         <td class="num">${(o.amountTaxIncluded || 0).toLocaleString()}</td>
-        <td>${isEditing
-          ? `<input type="number" id="ed-winRate-${safeId}" class="cell-edit" step="0.01" min="0" max="1" value="${o.winRate || 0}" style="width:60px;">`
+        <td title="赢率由阶段决定,不可手动调整">${isEditing
+          ? `<span style="color:var(--muted); font-size:12px;">${Math.round((o.winRate || 0) * 100)}% <span style="font-size:10px;">(固定)</span></span>`
           : `${Math.round((o.winRate || 0) * 100)}%`}</td>
         <td>${isEditing
           ? `<input type="date" id="ed-expectedDate-${safeId}" class="cell-edit" value="${serialToDateStr(o.expectedDate)}">`
@@ -360,18 +362,24 @@
     const stageEl = document.getElementById('ed-stage-' + id);
     const invEl = document.getElementById('ed-invoiceStatus-' + id);
     const dateEl = document.getElementById('ed-expectedDate-' + id);
-    const wrEl = document.getElementById('ed-winRate-' + id);
     if (!stageEl) return;
     opp.owner = ownerEl ? ownerEl.value : '';
     opp.stage = stageEl.value;
     opp.invoiceStatus = invEl ? invEl.value : '';
-    if (wrEl && wrEl.value !== '') {
-      opp.winRate = parseFloat(wrEl.value) || 0;
-    }
     if (dateEl && dateEl.value) {
       opp.expectedDate = excelDateToSerial(dateEl.value);
     } else {
       opp.expectedDate = null;
+    }
+    // If the stage changed, auto-set the win rate to the fixed mapping.
+    if (oldStage !== opp.stage) {
+      const m = String(opp.stage || '').toUpperCase().match(/ST\s*([1-9])/);
+      if (m) {
+        const key = 'ST' + m[1];
+        if (STAGE_DEFAULT_WINRATE[key] !== undefined) {
+          opp.winRate = STAGE_DEFAULT_WINRATE[key];
+        }
+      }
     }
     try { CRM_DB.upsertOpp(opp); } catch (e) { console.error('save failed', e); Notify.error('保存失败: ' + e.message); }
     editingId = null;
