@@ -163,6 +163,19 @@
   }
 
   async function saveToIndexedDb() {
+    // First, try the local dev server's /api/save-db endpoint (mirror of load).
+    if (typeof fetch !== 'undefined' && typeof location !== 'undefined' && location.protocol !== 'file:') {
+      try {
+        const bytes = db.export();
+        const res = await fetch('/api/save-db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: bytes
+        });
+        if (res.ok) return;
+      } catch (e) { /* endpoint not available, fall through */ }
+    }
+    // Fall back to IndexedDB
     if (typeof indexedDB === 'undefined') return;
     try {
       const bytes = db.export();
@@ -172,14 +185,22 @@
   }
 
   async function loadFromIndexedDb() {
-    if (typeof indexedDB === 'undefined') return null;
-    try {
-      const idb = await openIdb();
-      return await idbGet(idb);
-    } catch (e) { return null; }
-  }
-
-  async function loadFromIndexedDb() {
+    // First, try the local dev server's /api/load-db endpoint.
+    // When server.py is running, this returns the SQLite bytes from a real
+    // file (ras_crm.sqlite) in the server's working directory. The data
+    // follows the directory regardless of which port or hostname the user
+    // opens (127.0.0.1 vs localhost both work because the data is on disk,
+    // not in the browser's origin-tied IndexedDB).
+    if (typeof fetch !== 'undefined' && typeof location !== 'undefined' && location.protocol !== 'file:') {
+      try {
+        const res = await fetch('/api/load-db', { cache: 'no-store' });
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          if (buf.byteLength > 0) return new Uint8Array(buf);
+        }
+      } catch (e) { /* endpoint not available (no server.py running) */ }
+    }
+    // Fall back to IndexedDB
     if (typeof indexedDB === 'undefined') return null;
     try {
       const idb = await openIdb();
