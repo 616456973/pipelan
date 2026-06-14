@@ -24,26 +24,49 @@
   }
 
   function startEdit(id) {
+    // Inline-row edit entry point (kept for backwards-compat with any
+    // external callers). The list page uses its own __startEdit that
+    // toggles a per-row select, but if someone calls this with a real
+    // id, render the opp in edit mode using the detail flow.
+    const opp = id ? CRM.state.opportunities.find(o => o.id === id) : null;
+    if (!opp) {
+      // Fall back to a fresh form if the id is unknown
+      startNew();
+      return;
+    }
     editingId = id;
     mode = 'edit';
     CRM.state.currentOppId = id;
     CRM.state.detailEditing = true;
-    renderForm();
+    renderOppForm(opp, 'edit');
   }
 
   // Switch from 'view' → 'edit' (no editingId change; same opp)
   function enterEditMode() {
+    if (!editingId) return;
+    const opp = CRM.state.opportunities.find(o => o.id === editingId);
+    if (!opp) return;
     mode = 'edit';
     CRM.state.detailEditing = true;
-    renderForm();
+    // Re-render in edit mode using the SAME opp — don't call renderForm()
+    // here, that would reset currentOppId / editingId and render a blank
+    // 'new' form (the bug user reported: clicking 编辑 wiped the data).
+    renderOppForm(opp, 'edit');
   }
 
   // Switch from 'edit' → 'view' (discard pending changes)
   function cancelEdit() {
     if (mode === 'edit' && editingId) {
-      mode = 'view';
-      CRM.state.detailEditing = false;
-      renderForm();
+      // Re-render the existing opp in view mode (discards in-flight edits).
+      const opp = CRM.state.opportunities.find(o => o.id === editingId);
+      if (opp) {
+        mode = 'view';
+        CRM.state.detailEditing = false;
+        renderOppForm(opp, 'view');
+      } else {
+        // Opp not found, fall back to list
+        document.querySelector('.tab[data-tab="list"]').click();
+      }
     } else {
       // In 'new' mode, cancel = back to list
       document.querySelector('.tab[data-tab="list"]').click();
