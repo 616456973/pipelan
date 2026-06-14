@@ -49,6 +49,31 @@
       db = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database();
     }
     runMigrations();
+    // One-time auto-migration: if the data was loaded from IndexedDB and
+    // the server's /api/load-db returned 404 (no file yet), the file
+    // doesn't exist on disk. POST the IndexedDB bytes to /api/save-db
+    // so the file gets created and future loads use the file (which
+    // follows the directory). This is a same-origin migration — it
+    // won't transfer data across different ports/origins.
+    if (_dataSource === 'indexeddb' && _loadDbStatus === 'not-found'
+        && typeof fetch !== 'undefined' && typeof location !== 'undefined' && location.protocol !== 'file:') {
+      try {
+        const bytes = db.export();
+        const res = await fetch('/api/save-db', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: bytes
+        });
+        if (res.ok) {
+          _dataSource = 'file';
+          console.log('[db] auto-migrated IndexedDB → /api/save-db (' + bytes.byteLength + ' bytes, source=file)');
+        } else {
+          console.warn('[db] auto-migrate: /api/save-db returned ' + res.status);
+        }
+      } catch (e) {
+        console.warn('[db] auto-migrate failed: ' + e.message);
+      }
+    }
   }
 
   // ---- Schema / Migrations ----
@@ -164,6 +189,7 @@
 
   // ---- Data source tracking (for debug indicator) ----
   let _dataSource = 'none';  // 'file' | 'indexeddb' | 'none'
+  let _loadDbStatus = null;   // 'ok' | 'not-found' | 'error' | null (server response)
   function getDataSource() { return _dataSource; }
 
   async function saveToIndexedDb() {
@@ -209,12 +235,17 @@
           const buf = await res.arrayBuffer();
           if (buf.byteLength > 0) {
             _dataSource = 'file';
+            _loadDbStatus = 'ok';
             console.log('[db] loaded from /api/load-db (' + buf.byteLength + ' bytes, source=file)');
             return new Uint8Array(buf);
           }
         }
-        console.warn('[db] /api/load-db returned ' + res.status + ', falling back to IndexedDB');
+        // res.ok is false — record the status so initDb can decide whether
+        // to auto-migrate IndexedDB → file (only on 404, not on 500 etc.)
+        _loadDbStatus = (res.status === 404) ? 'not-found' : 'error';
+        console.warn('[db] /api/load-db returned ' + res.status + ' (status=' + _loadDbStatus + '), falling back to IndexedDB');
       } catch (e) {
+        _loadDbStatus = 'error';
         console.warn('[db] /api/load-db unreachable: ' + e.message + ', falling back to IndexedDB');
       }
     }
