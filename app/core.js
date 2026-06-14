@@ -136,7 +136,7 @@
       productLine: '', product: '', salesChannel: '',
       stage: 'ST1 线索(Leads)',
       invoiceStatus: '',
-      currency: '',
+      currency: 'RMB',
       winRate: 0, amountTaxIncluded: 0, amountRmbEquivalent: 0,
       expectedDate: null, note: '', loseReason: '',
       projectStatus: '',

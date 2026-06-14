@@ -195,12 +195,12 @@
             ` : ''}
           </div>
           <div class="field ${roClass}"><label>预计落单时间</label><input id="f-expectedDate" type="date" value="${serialToExcelDate(opp.expectedDate)}" ${ro}></div>
-          <div class="field ${roClass}" style="grid-column: span 2"><label>备注 (内部)</label><textarea id="f-note" rows="2" ${ro}>${opp.note || ''}</textarea></div>
           <div class="field ${roClass}" style="grid-column: span 2">
             <label>项目情况</label>
             <textarea id="f-projectStatus" rows="4" ${ro} placeholder="${PROJECT_STATUS_PLACEHOLDER}">${opp.projectStatus || ''}</textarea>
             <div class="help">详细记录项目情况,例如客户关键人、具体销售产品/服务、当前进展等。仅内部可见,不会随 xlsx 导出对外分享。</div>
           </div>
+          <div class="field ${roClass}" style="grid-column: span 2"><label>备注 (内部)</label><textarea id="f-note" rows="2" ${ro}>${opp.note || ''}</textarea></div>
         </div>
         <div class="form-actions">
           ${actions}

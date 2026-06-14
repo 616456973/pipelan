@@ -1002,7 +1002,6 @@ tr.row-changed td {
 tr.row-clickable { cursor: pointer; }
 tr.row-clickable:hover td {
   background: #f0f5ff !important;  /* soft blue tint */
-  box-shadow: inset 3px 0 0 var(--primary);
 }
 tr.row-clickable:active td { background: #e0ecff !important; }
 
