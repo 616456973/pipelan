@@ -179,6 +179,14 @@
     } catch (e) { return null; }
   }
 
+  async function loadFromIndexedDb() {
+    if (typeof indexedDB === 'undefined') return null;
+    try {
+      const idb = await openIdb();
+      return await idbGet(idb);
+    } catch (e) { return null; }
+  }
+
   function openIdb() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(IDB_NAME, 1);
