@@ -119,6 +119,34 @@
       }
       setMeta('schema_version', '5');
     }
+    if (getMeta('schema_version') === '5') {
+      // v5 → v6: normalize win rates to the fixed STAGE_DEFAULT_WINRATE
+      // mapping. Per sales workflow policy, the mapping is locked:
+      //   ST1=0, ST2=0.3, ST3=0.5, ST4=1, ST5=0
+      // Old data may have arbitrary or stale values (e.g. ST1 used to
+      // default to 0.1, or the user might have manually edited rates
+      // before they were made read-only). Snap every opp to the
+      // canonical mapping based on its current stage.
+      const STAGE_FIXED_WINRATE = { 'ST1': 0, 'ST2': 0.3, 'ST3': 0.5, 'ST4': 1, 'ST5': 0 };
+      const r = db.exec("SELECT id, stage, win_rate FROM oportunidades");
+      const rows = (r[0] && r[0].values) || [];
+      let n = 0;
+      for (const [id, stage, winRate] of rows) {
+        const m = String(stage || '').toUpperCase().match(/ST\s*([1-9])/);
+        if (m) {
+          const key = 'ST' + m[1];
+          if (STAGE_FIXED_WINRATE[key] !== undefined && winRate !== STAGE_FIXED_WINRATE[key]) {
+            db.run("UPDATE oportunidades SET win_rate = ? WHERE id = ?", [STAGE_FIXED_WINRATE[key], id]);
+            n++;
+          }
+        }
+      }
+      if (n > 0) {
+        console.log('[db] migration v5→v6: normalized ' + n + ' win rates to the fixed mapping');
+        scheduleSave();
+      }
+      setMeta('schema_version', '6');
+    }
   }
 
   // Idempotent: creates all dict tables (safe to call on any DB state).

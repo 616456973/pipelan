@@ -387,6 +387,39 @@ function test(name, fn) {
     assert.ok(state.opportunities.some(o => o.id === 'gone' && o.deleted === true), 'deleted opp present in state');
   });
 
+  await test('migration v5→v6: normalize win rates to fixed STAGE_DEFAULT_WINRATE mapping', async () => {
+    // Build a v5-shaped backup with NON-conforming win rates
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.clearAll();
+    const seed = (id, stage, winRate) => CRM_DB.upsertOpp({
+      id, team: '', owner: '', customer: '',
+      productLine: '', product: '', salesChannel: '', stage,
+      invoiceStatus: '', currency: 'USD',
+      winRate, amountTaxIncluded: 0, amountRmbEquivalent: 0, expectedDate: null,
+      note: '', loseReason: '', projectStatus: '', prepaidAmount: 0,
+      dictRefs: null, deleted: false, parseError: null, position: 1
+    });
+    seed('s1', 'ST1 线索(Leads)', 0.1);   // old default, should snap to 0
+    seed('s2', 'ST2 商机(Pipeline)', 0.9); // user-edited, should snap to 0.3
+    seed('s3', 'ST3 投标(Proposal)', 0.2); // user-edited, should snap to 0.5
+    seed('s4', 'ST4 赢单(Win)', 0.7);     // user-edited, should snap to 1
+    seed('s5', 'ST5 丢单(Lose)', 0.5);     // user-edited, should snap to 0
+    // Force schema back to 5 to simulate an old DB
+    CRM_DB._execForTest("DELETE FROM meta WHERE key='schema_version'");
+    CRM_DB._execForTest("INSERT INTO meta (key, value) VALUES ('schema_version', '5')");
+    const backup = CRM_DB.exportBackup();
+    // Re-init — should run v5→v6 migration
+    await CRM_DB.initDb({ forceInMemory: true });
+    CRM_DB.importBackup(backup);
+    // Verify all win rates are now normalized
+    const expected = { s1: 0, s2: 0.3, s3: 0.5, s4: 1, s5: 0 };
+    for (const [id, want] of Object.entries(expected)) {
+      const got = CRM_DB.getOpp(id);
+      assert.equal(got.winRate, want, id + ' win rate should be ' + want + ' (was snapped by v5→v6 migration)');
+    }
+    assert.equal(CRM_DB.getMeta('schema_version'), '6', 'schema_version should be at 6 after migration');
+  });
+
   await test('schema v4 includes project_status column and supports CRUD', async () => {
     await CRM_DB.initDb({ forceInMemory: true });
     CRM_DB.clearAll();
@@ -428,10 +461,10 @@ function test(name, fn) {
     assert.ok(colNames.includes('prepaid_amount'), 'prepaid_amount should be added by v4→v5 migration');
     // Verify old data preserved
     const got = CRM_DB.getOpp('o1');
-    assert.equal(got.oppName, 'old-opp', 'old data should survive v3→v4→v5 migrations');
+    assert.equal(got.oppName, 'old-opp', 'old data should survive v3→v4→v5→v6 migrations');
     assert.equal(got.projectStatus, '', 'projectStatus should default to empty for migrated rows');
     assert.equal(got.prepaidAmount, 0, 'prepaidAmount should default to 0 for migrated rows');
-    assert.equal(CRM_DB.getMeta('schema_version'), '5', 'schema_version should be at 5 after both migrations');
+    assert.equal(CRM_DB.getMeta('schema_version'), '6', 'schema_version should be at 6 after all migrations');
   });
 
   await test('schema v5: prepaid_amount roundtrips through upsertOpp', async () => {
